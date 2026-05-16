@@ -23,9 +23,10 @@ build-linux:
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/linux-arm64/cfedgepickctl ./cmd/cfedgepickctl
 
 dist: build-linux
-	tar -C $(DIST_DIR)/linux-amd64 -czf $(DIST_DIR)/cfedgepickd-linux-amd64.tar.gz cfedgepickd cfedgepickctl
-	tar -C $(DIST_DIR)/linux-arm64 -czf $(DIST_DIR)/cfedgepickd-linux-arm64.tar.gz cfedgepickd cfedgepickctl
+	cp README.md deploy/install.sh configs/cfedgepickd.example.json $(DIST_DIR)/linux-amd64/
+	cp README.md deploy/install.sh configs/cfedgepickd.example.json $(DIST_DIR)/linux-arm64/
+	tar -C $(DIST_DIR)/linux-amd64 -czf $(DIST_DIR)/cfedgepickd-linux-amd64.tar.gz .
+	tar -C $(DIST_DIR)/linux-arm64 -czf $(DIST_DIR)/cfedgepickd-linux-arm64.tar.gz .
 
 clean:
 	rm -rf $(DIST_DIR) cfedgepickd cfedgepickctl
-
