@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/guptarohit/asciigraph"
+	prettytable "github.com/jedib0t/go-pretty/v6/table"
 	"github.com/kayphoon/cfpick/internal/cloudflared"
 	"github.com/kayphoon/cfpick/internal/config"
 	"github.com/kayphoon/cfpick/internal/daemon"
@@ -71,57 +73,46 @@ func statusCmd(args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 
-	fmt.Printf("cfpick status\n")
-	fmt.Printf("config=%s protocol=%s history=%s\n", path, cfg.Cloudflared.Protocol, cfg.Runtime.HistoryFile)
-
-	if ready, err := cloudflared.FetchReady(ctx, cfg.Cloudflared.ReadyURL); err == nil {
-		fmt.Printf("ready: connections=%d connector=%s\n", ready.ReadyConnections, ready.ConnectorID)
-	} else {
-		fmt.Printf("ready: unavailable (%v)\n", err)
-	}
-	if metrics, err := cloudflared.FetchMetrics(ctx, cfg.Cloudflared.MetricsURL); err == nil {
-		fmt.Printf("metrics: ha=%d concurrent=%d requests=%.0f errors=%.0f\n",
-			metrics.HAConnections,
-			metrics.ConcurrentRequests,
-			metrics.TotalRequests,
-			metrics.RequestErrors,
-		)
-	} else {
-		fmt.Printf("metrics: unavailable (%v)\n", err)
-	}
-	if conns, err := cloudflared.CurrentEdges(ctx, cfg.Edge.Port); err == nil && len(conns) > 0 {
-		fmt.Printf("edges: %s\n", strings.Join(edgeRemotes(conns), ", "))
-	}
-
 	historyPath := resolveHistoryPath(cfg.Runtime.HistoryFile)
+
+	ready, readyErr := cloudflared.FetchReady(ctx, cfg.Cloudflared.ReadyURL)
+	metrics, metricsErr := cloudflared.FetchMetrics(ctx, cfg.Cloudflared.MetricsURL)
+	conns, edgesErr := cloudflared.CurrentEdges(ctx, cfg.Edge.Port)
+
 	records, err := history.ReadSince(historyPath, time.Now().Add(-window))
 	if err != nil {
 		log.Fatalf("read history: %v", err)
 	}
+
+	fmt.Printf("cfpick status  %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Println(renderOverview(path, cfg, historyPath, *metric, *since))
+	fmt.Println()
+	fmt.Println(renderHealth(ready, readyErr, metrics, metricsErr))
+	fmt.Println()
+	fmt.Println(renderEdges(conns, edgesErr))
+
 	if len(records) == 0 {
-		fmt.Printf("history: no records in last %s at %s\n", *since, historyPath)
+		fmt.Println()
+		fmt.Printf("History: no records in last %s at %s\n", *since, historyPath)
 		return
 	}
+
 	latest := records[len(records)-1]
-	fmt.Printf("latest: effective=%s top=%s rtt=%.2fms ready=%d ha=%d reason=%s\n",
-		latest.EffectiveProtocol,
-		latest.TopIP,
-		latest.TopMedianMS,
-		latest.ReadyConnections,
-		latest.HAConnections,
-		latest.Reason,
-	)
+	fmt.Println()
+	fmt.Println(renderLatest(latest))
 
 	points, summary, err := history.Series(records, *metric)
 	if err != nil {
 		log.Fatalf("series: %v", err)
 	}
-	out, err := history.RenderASCII(points, summary, *width, *height)
-	if err != nil {
-		fmt.Printf("graph: %v\n", err)
+	fmt.Println()
+	fmt.Println(renderTrendSummary(summary, *since))
+	if len(points) == 0 {
+		fmt.Printf("Trend: no points for metric %q in last %s\n", *metric, *since)
 		return
 	}
-	fmt.Print(out)
+	fmt.Println()
+	fmt.Println(renderLineChart(points, summary, *since, *width, *height))
 }
 
 func runCmd(args []string) {
@@ -273,6 +264,187 @@ func edgeRemotes(conns []cloudflared.EdgeConnection) []string {
 		out = append(out, c.Remote)
 	}
 	return out
+}
+
+func renderOverview(configPath string, cfg config.Config, historyPath, metric, since string) string {
+	return renderKVTable("Overview", []prettytable.Row{
+		{"Config", configPath},
+		{"Protocol", cfg.Cloudflared.Protocol},
+		{"Metrics", cfg.Cloudflared.MetricsURL},
+		{"Ready", cfg.Cloudflared.ReadyURL},
+		{"History", historyPath},
+		{"Window", since},
+		{"Metric", metric},
+	})
+}
+
+func renderHealth(ready cloudflared.Ready, readyErr error, metrics cloudflared.Metrics, metricsErr error) string {
+	rows := []prettytable.Row{}
+	if readyErr != nil {
+		rows = append(rows, prettytable.Row{"Ready", "UNKNOWN", readyErr.Error()})
+	} else {
+		rows = append(rows, prettytable.Row{
+			"Ready",
+			statusLabel(ready.ReadyConnections >= 2),
+			fmt.Sprintf("connections=%d connector=%s", ready.ReadyConnections, emptyDash(ready.ConnectorID)),
+		})
+	}
+	if metricsErr != nil {
+		rows = append(rows, prettytable.Row{"Metrics", "UNKNOWN", metricsErr.Error()})
+	} else {
+		rows = append(rows,
+			prettytable.Row{"HA", statusLabel(metrics.HAConnections >= 2), fmt.Sprintf("ha_connections=%d", metrics.HAConnections)},
+			prettytable.Row{"Traffic", trafficLabel(metrics.ConcurrentRequests), fmt.Sprintf("concurrent=%d total_requests=%.0f", metrics.ConcurrentRequests, metrics.TotalRequests)},
+			prettytable.Row{"Errors", errorLabel(metrics.RequestErrors), fmt.Sprintf("request_errors=%.0f", metrics.RequestErrors)},
+		)
+	}
+	return renderTable("Health", []interface{}{"Signal", "State", "Detail"}, rows)
+}
+
+func renderEdges(conns []cloudflared.EdgeConnection, err error) string {
+	if err != nil {
+		return renderTable("Current Edges", []interface{}{"State", "Detail"}, []prettytable.Row{
+			{"UNKNOWN", err.Error()},
+		})
+	}
+	if len(conns) == 0 {
+		return renderTable("Current Edges", []interface{}{"State", "Detail"}, []prettytable.Row{
+			{"EMPTY", "no cloudflared :7844 sockets found"},
+		})
+	}
+	rows := make([]prettytable.Row, 0, len(conns))
+	for i, conn := range conns {
+		rows = append(rows, prettytable.Row{i + 1, conn.IP, conn.Remote, conn.Local})
+	}
+	return renderTable("Current Edges", []interface{}{"#", "IP", "Remote", "Local"}, rows)
+}
+
+func renderLatest(r history.Record) string {
+	return renderKVTable("Latest Sample", []prettytable.Row{
+		{"Time", formatTime(r.Time)},
+		{"Effective Protocol", emptyDash(r.EffectiveProtocol)},
+		{"Top IP", emptyDash(r.TopIP)},
+		{"Top RTT", formatMS(r.TopMedianMS)},
+		{"Ready / HA", fmt.Sprintf("%d / %d", r.ReadyConnections, r.HAConnections)},
+		{"Requests / Errors", fmt.Sprintf("%.0f / %.0f", r.TotalRequests, r.RequestErrors)},
+		{"Idle", yesNo(r.Idle)},
+		{"Degraded", yesNo(r.Degraded)},
+		{"Should Switch", yesNo(r.ShouldSwitch)},
+		{"Switch Applied", yesNo(r.SwitchApplied)},
+		{"Reason", emptyDash(r.Reason)},
+	})
+}
+
+func renderTrendSummary(sum history.Summary, since string) string {
+	if sum.Count == 0 {
+		return renderTable("Trend", []interface{}{"Window", "Metric", "Points"}, []prettytable.Row{
+			{since, sum.Metric, 0},
+		})
+	}
+	return renderTable("Trend", []interface{}{"Window", "Metric", "Points", "Latest", "Min", "Avg", "Max", "From", "To"}, []prettytable.Row{
+		{
+			since,
+			sum.Metric,
+			sum.Count,
+			fmt.Sprintf("%.2f", sum.Latest),
+			fmt.Sprintf("%.2f", sum.Min),
+			fmt.Sprintf("%.2f", sum.Avg),
+			fmt.Sprintf("%.2f", sum.Max),
+			formatTime(sum.From),
+			formatTime(sum.To),
+		},
+	})
+}
+
+func renderLineChart(points []history.Point, sum history.Summary, since string, width, height int) string {
+	values := make([]float64, 0, len(points))
+	for _, point := range points {
+		values = append(values, point.Value)
+	}
+	width = clamp(width, 20, 160)
+	height = clamp(height, 4, 40)
+	opts := []asciigraph.Option{
+		asciigraph.Width(width),
+		asciigraph.Height(height),
+		asciigraph.Precision(2),
+		asciigraph.Caption(fmt.Sprintf("%s over %s", sum.Metric, since)),
+	}
+	if sum.Min == sum.Max {
+		opts = append(opts, asciigraph.LowerBound(sum.Min-1), asciigraph.UpperBound(sum.Max+1))
+	}
+	return asciigraph.Plot(values, opts...)
+}
+
+func renderKVTable(title string, rows []prettytable.Row) string {
+	return renderTable(title, []interface{}{"Field", "Value"}, rows)
+}
+
+func renderTable(title string, header []interface{}, rows []prettytable.Row) string {
+	t := prettytable.NewWriter()
+	t.SetTitle(title)
+	t.SetStyle(prettytable.StyleDefault)
+	t.AppendHeader(prettytable.Row(header))
+	t.AppendRows(rows)
+	return t.Render()
+}
+
+func statusLabel(ok bool) string {
+	if ok {
+		return "OK"
+	}
+	return "WARN"
+}
+
+func trafficLabel(concurrent int) string {
+	if concurrent == 0 {
+		return "IDLE"
+	}
+	return "ACTIVE"
+}
+
+func errorLabel(errors float64) string {
+	if errors > 0 {
+		return "SEEN"
+	}
+	return "OK"
+}
+
+func yesNo(v bool) string {
+	if v {
+		return "yes"
+	}
+	return "no"
+}
+
+func emptyDash(v string) string {
+	if strings.TrimSpace(v) == "" {
+		return "-"
+	}
+	return v
+}
+
+func formatMS(v float64) string {
+	if v <= 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%.2f ms", v)
+}
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	return t.Local().Format("2006-01-02 15:04:05")
+}
+
+func clamp(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 func printJSON(v any, pretty bool) {

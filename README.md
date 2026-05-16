@@ -56,7 +56,8 @@ would be installed. `install --apply` writes `/etc/cfpick/config.json` and the
 Each daemon cycle appends one JSONL record to `/var/lib/cfpick/history.jsonl`.
 The file path is configurable through `runtime.history_file`.
 
-Use `cfpick status` to draw terminal charts for recent windows:
+Use `cfpick status` to show a terminal dashboard. It renders current health,
+active edge sockets, the latest sample, and a line chart for the selected metric:
 
 ```bash
 cfpick status --metric rtt --since 24h
