@@ -44,11 +44,6 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		return Report{Discover: dr, Config: cfg}, err
 	}
 	pr, err := probe.Run(ctx, cfg, probe.Mode(cfg.Cloudflared.Protocol))
-	if err == nil {
-		cfg.Cloudflared.Protocol = pr.EffectiveProtocol
-	} else if cfg.Cloudflared.Protocol == config.ProtocolAuto {
-		cfg.Cloudflared.Protocol = config.ProtocolHTTP2
-	}
 	cfg.Runtime.DryRun = true
 	unit := RenderUnit(opts.Binary, opts.Config, cfg.Cloudflared.Service)
 	rep := Report{Discover: dr, Probe: pr, Config: cfg, Unit: unit}

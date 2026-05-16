@@ -24,6 +24,10 @@ Cloudflare Tunnel QUIC edge presents a Cloudflare Origin certificate. The probe
 therefore validates the expected `argotunnel` ALPN and Cloudflare Origin certificate
 shape instead of requiring a public-web CA chain.
 
+When configured with `protocol: auto`, `cfedgepickd` may use QUIC probes to rank IPs,
+but it keeps `cloudflared` configured as `auto` so production traffic can fall back to
+HTTP/2 if UDP/QUIC breaks later.
+
 Not supported in v1:
 
 - OpenWrt / non-systemd service managers

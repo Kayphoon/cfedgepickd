@@ -6,6 +6,7 @@ import (
 
 	"github.com/kayphoon/cfedgepickd/internal/cloudflared"
 	"github.com/kayphoon/cfedgepickd/internal/config"
+	"github.com/kayphoon/cfedgepickd/internal/probe"
 	"github.com/kayphoon/cfedgepickd/internal/state"
 )
 
@@ -31,5 +32,25 @@ func TestIdleStateStartsWindowThenBecomesIdle(t *testing.T) {
 	idle, _ = idleState(st, metrics, cfg, now.Add(11*time.Second))
 	if !idle {
 		t.Fatal("unchanged traffic after idle window should be idle")
+	}
+}
+
+func TestProtocolForCloudflaredConfigKeepsAuto(t *testing.T) {
+	cfg := config.Default()
+	cfg.Cloudflared.Protocol = config.ProtocolAuto
+	pr := probe.Report{EffectiveProtocol: config.ProtocolQUIC}
+
+	if got := protocolForCloudflaredConfig(cfg, pr); got != config.ProtocolAuto {
+		t.Fatalf("protocol = %q, want auto", got)
+	}
+}
+
+func TestProtocolForCloudflaredConfigKeepsExplicitProtocol(t *testing.T) {
+	cfg := config.Default()
+	cfg.Cloudflared.Protocol = config.ProtocolQUIC
+	pr := probe.Report{EffectiveProtocol: config.ProtocolHTTP2}
+
+	if got := protocolForCloudflaredConfig(cfg, pr); got != config.ProtocolQUIC {
+		t.Fatalf("protocol = %q, want quic", got)
 	}
 }

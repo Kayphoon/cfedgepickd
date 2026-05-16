@@ -109,11 +109,12 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 	var sw *switcher.Result
 	if should && apply {
 		cfg.Runtime.DryRun = false
-		res, err := switcher.Apply(ctx, cfg, topIPs, pr.EffectiveProtocol)
+		appliedProtocol := protocolForCloudflaredConfig(cfg, pr)
+		res, err := switcher.Apply(ctx, cfg, topIPs, appliedProtocol)
 		sw = &res
 		st.LastSwitchAt = time.Now()
 		st.LastSwitchOK = err == nil
-		st.LastProtocol = pr.EffectiveProtocol
+		st.LastProtocol = appliedProtocol
 		if err != nil {
 			_ = state.Save(cfg.Runtime.StateFile, st)
 			return decision, sw, err
@@ -121,6 +122,19 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 	}
 	_ = state.Save(cfg.Runtime.StateFile, st)
 	return decision, sw, nil
+}
+
+func protocolForCloudflaredConfig(cfg config.Config, pr probe.Report) string {
+	if cfg.Cloudflared.Protocol == config.ProtocolAuto {
+		return config.ProtocolAuto
+	}
+	if cfg.Cloudflared.Protocol != "" {
+		return cfg.Cloudflared.Protocol
+	}
+	if pr.EffectiveProtocol != "" {
+		return pr.EffectiveProtocol
+	}
+	return config.ProtocolAuto
 }
 
 func Run(ctx context.Context, cfg config.Config) error {
