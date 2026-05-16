@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfedgepickd/internal/config"
+	"github.com/kayphoon/cfpick/internal/config"
 )
 
 type Report struct {

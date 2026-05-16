@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfedgepickd/internal/cloudflared"
-	"github.com/kayphoon/cfedgepickd/internal/config"
-	"github.com/kayphoon/cfedgepickd/internal/hosts"
+	"github.com/kayphoon/cfpick/internal/cloudflared"
+	"github.com/kayphoon/cfpick/internal/config"
+	"github.com/kayphoon/cfpick/internal/hosts"
 )
 
 type Result struct {
@@ -161,7 +161,7 @@ func updateProtocol(path, backupDir, protocol string) (string, error) {
 	if !strings.HasSuffix(next, "\n") {
 		next += "\n"
 	}
-	tmp := path + ".cfedgepickd.tmp"
+	tmp := path + ".cfpick.tmp"
 	if err := os.WriteFile(tmp, []byte(next), 0644); err != nil {
 		return backup, err
 	}
@@ -177,7 +177,7 @@ func restoreFile(path, backup string) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".cfedgepickd.restore.tmp"
+	tmp := path + ".cfpick.restore.tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return err
 	}

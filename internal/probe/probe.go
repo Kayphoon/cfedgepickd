@@ -16,7 +16,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/kayphoon/cfedgepickd/internal/config"
+	"github.com/kayphoon/cfpick/internal/config"
 )
 
 type Mode string

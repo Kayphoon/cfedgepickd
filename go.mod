@@ -1,4 +1,4 @@
-module github.com/kayphoon/cfedgepickd
+module github.com/kayphoon/cfpick
 
 go 1.22
 

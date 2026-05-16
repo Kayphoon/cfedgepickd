@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfedgepickd/internal/config"
-	"github.com/kayphoon/cfedgepickd/internal/discover"
-	"github.com/kayphoon/cfedgepickd/internal/history"
-	"github.com/kayphoon/cfedgepickd/internal/install"
-	"github.com/kayphoon/cfedgepickd/internal/probe"
+	"github.com/kayphoon/cfpick/internal/config"
+	"github.com/kayphoon/cfpick/internal/discover"
+	"github.com/kayphoon/cfpick/internal/history"
+	"github.com/kayphoon/cfpick/internal/install"
+	"github.com/kayphoon/cfpick/internal/probe"
 )
 
 var version = "dev"

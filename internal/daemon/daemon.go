@@ -7,13 +7,13 @@ import (
 	"log"
 	"time"
 
-	"github.com/kayphoon/cfedgepickd/internal/cloudflared"
-	"github.com/kayphoon/cfedgepickd/internal/config"
-	"github.com/kayphoon/cfedgepickd/internal/history"
-	"github.com/kayphoon/cfedgepickd/internal/hosts"
-	"github.com/kayphoon/cfedgepickd/internal/probe"
-	"github.com/kayphoon/cfedgepickd/internal/state"
-	"github.com/kayphoon/cfedgepickd/internal/switcher"
+	"github.com/kayphoon/cfpick/internal/cloudflared"
+	"github.com/kayphoon/cfpick/internal/config"
+	"github.com/kayphoon/cfpick/internal/history"
+	"github.com/kayphoon/cfpick/internal/hosts"
+	"github.com/kayphoon/cfpick/internal/probe"
+	"github.com/kayphoon/cfpick/internal/state"
+	"github.com/kayphoon/cfpick/internal/switcher"
 )
 
 type Decision struct {

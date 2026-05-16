@@ -1,6 +1,7 @@
-# cfedgepickd
+# cfpick
 
-`cfedgepickd` is a control-plane daemon for `cloudflared` Tunnel edge IP selection.
+`cfpick` is a small control-plane daemon and CLI for `cloudflared` Tunnel edge IP
+selection.
 
 It does not proxy traffic. It probes Cloudflare edge candidates, observes `cloudflared`
 health and idle windows, updates `/etc/hosts`, restarts `cloudflared`, and rolls back
@@ -24,7 +25,7 @@ Cloudflare Tunnel QUIC edge presents a Cloudflare Origin certificate. The probe
 therefore validates the expected `argotunnel` ALPN and Cloudflare Origin certificate
 shape instead of requiring a public-web CA chain.
 
-When configured with `protocol: auto`, `cfedgepickd` may use QUIC probes to rank IPs,
+When configured with `protocol: auto`, `cfpick` may use QUIC probes to rank IPs,
 but it keeps `cloudflared` configured as `auto` so production traffic can fall back to
 HTTP/2 if UDP/QUIC breaks later.
 
@@ -37,32 +38,31 @@ Not supported in v1:
 ## Commands
 
 ```bash
-cfedgepickctl discover
-cfedgepickctl probe --protocol auto
-cfedgepickctl install --dry-run --protocol auto
-cfedgepickctl graph --metric rtt --since 24h
-cfedgepickctl graph --metric error_delta --since 24h
-cfedgepickd once --config /etc/cfedgepickd/config.json
-cfedgepickd run --config /etc/cfedgepickd/config.json
+cfpick status
+cfpick status --metric error_delta --since 24h
+cfpick discover
+cfpick probe --protocol auto
+cfpick install --dry-run --protocol auto
+cfpick once --config /etc/cfpick/config.json
+cfpick run --config /etc/cfpick/config.json
 ```
 
 `install --dry-run` only prints discovered config, probe output, and the unit that
-would be installed. `install --apply` writes `/etc/cfedgepickd/config.json` and the
-systemd unit.
+would be installed. `install --apply` writes `/etc/cfpick/config.json` and the
+`cfpick.service` systemd unit.
 
 ## History And Graphs
 
-Each daemon cycle appends one JSONL record to
-`/var/lib/cfedgepickd/history.jsonl`. The file path is configurable through
-`runtime.history_file`.
+Each daemon cycle appends one JSONL record to `/var/lib/cfpick/history.jsonl`.
+The file path is configurable through `runtime.history_file`.
 
-Use `cfedgepickctl graph` to draw terminal charts for recent windows:
+Use `cfpick status` to draw terminal charts for recent windows:
 
 ```bash
-cfedgepickctl graph --metric rtt --since 24h
-cfedgepickctl graph --metric request_delta --since 24h
-cfedgepickctl graph --metric error_delta --since 24h
-cfedgepickctl graph --metric ready --since 7d --width 100 --height 16
+cfpick status --metric rtt --since 24h
+cfpick status --metric request_delta --since 24h
+cfpick status --metric error_delta --since 24h
+cfpick status --metric ready --since 7d --width 100 --height 16
 ```
 
 Supported metrics are `rtt`, `ready`, `ha`, `concurrent`, `requests`,
@@ -78,8 +78,8 @@ make dist
 `make dist` builds static Linux binaries for `linux/amd64` and `linux/arm64`:
 
 ```text
-dist/cfedgepickd-linux-amd64.tar.gz
-dist/cfedgepickd-linux-arm64.tar.gz
+dist/cfpick-linux-amd64.tar.gz
+dist/cfpick-linux-arm64.tar.gz
 ```
 
 ## Safety

@@ -4,8 +4,8 @@ set -eu
 mode="dry-run"
 protocol="auto"
 prefix="/usr/local/bin"
-config="/etc/cfedgepickd/config.json"
-unit="/etc/systemd/system/cfedgepickd.service"
+config="/etc/cfpick/config.json"
+unit="/etc/systemd/system/cfpick.service"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -21,13 +21,13 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$mode" = "dry-run" ]; then
-  ./cfedgepickctl install --protocol "$protocol" --config "$config" --binary "$prefix/cfedgepickd" --unit "$unit"
+  ./cfpick install --protocol "$protocol" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
   exit 0
 fi
 
-install -m 0755 ./cfedgepickd "$prefix/cfedgepickd"
-install -m 0755 ./cfedgepickctl "$prefix/cfedgepickctl"
-"$prefix/cfedgepickctl" install --apply --protocol "$protocol" --config "$config" --binary "$prefix/cfedgepickd" --unit "$unit"
-systemctl enable cfedgepickd.service
-echo "installed cfedgepickd; start with: systemctl start cfedgepickd"
-
+install -m 0755 ./cfpick "$prefix/cfpick"
+if [ -f ./cfedgepickd ]; then install -m 0755 ./cfedgepickd "$prefix/cfedgepickd"; fi
+if [ -f ./cfedgepickctl ]; then install -m 0755 ./cfedgepickctl "$prefix/cfedgepickctl"; fi
+"$prefix/cfpick" install --apply --protocol "$protocol" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
+systemctl enable cfpick.service
+echo "installed cfpick; inspect with: cfpick status; start with: systemctl start cfpick"

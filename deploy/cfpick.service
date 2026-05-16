@@ -1,0 +1,13 @@
+[Unit]
+Description=cfpick Cloudflare edge IP picker for cloudflared
+After=network-online.target cloudflared.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cfpick run --config /etc/cfpick/config.json
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

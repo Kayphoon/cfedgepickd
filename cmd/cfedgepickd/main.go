@@ -7,8 +7,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/kayphoon/cfedgepickd/internal/config"
-	"github.com/kayphoon/cfedgepickd/internal/daemon"
+	"github.com/kayphoon/cfpick/internal/config"
+	"github.com/kayphoon/cfpick/internal/daemon"
 )
 
 var version = "dev"
