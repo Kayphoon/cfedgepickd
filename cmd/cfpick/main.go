@@ -103,6 +103,26 @@ func statusCmd(args []string) {
 	fmt.Println()
 	fmt.Println(renderLatest(latest))
 
+	if isRequestRateMetric(*metric) {
+		reqPoints, reqSummary, err := history.Series(records, "request_rate")
+		if err != nil {
+			log.Fatalf("series: %v", err)
+		}
+		errPoints, errSummary, err := history.Series(records, "error_rate")
+		if err != nil {
+			log.Fatalf("series: %v", err)
+		}
+		fmt.Println()
+		fmt.Println(renderMultiTrendSummary(*since, []history.Summary{reqSummary, errSummary}))
+		if len(reqPoints) == 0 {
+			fmt.Printf("Trend: no request_rate points in last %s\n", *since)
+			return
+		}
+		fmt.Println()
+		fmt.Println(renderRequestErrorChart(reqPoints, errPoints, *since, *width, *height))
+		return
+	}
+
 	points, summary, err := history.Series(records, *metric)
 	if err != nil {
 		log.Fatalf("series: %v", err)
@@ -412,6 +432,28 @@ func renderTrendSummary(sum history.Summary, since string) string {
 	})
 }
 
+func renderMultiTrendSummary(since string, summaries []history.Summary) string {
+	rows := make([]prettytable.Row, 0, len(summaries))
+	for _, sum := range summaries {
+		if sum.Count == 0 {
+			rows = append(rows, prettytable.Row{since, sum.Metric, 0, "-", "-", "-", "-", "-", "-"})
+			continue
+		}
+		rows = append(rows, prettytable.Row{
+			since,
+			sum.Metric,
+			sum.Count,
+			fmt.Sprintf("%.2f", sum.Latest),
+			fmt.Sprintf("%.2f", sum.Min),
+			fmt.Sprintf("%.2f", sum.Avg),
+			fmt.Sprintf("%.2f", sum.Max),
+			formatTime(sum.From),
+			formatTime(sum.To),
+		})
+	}
+	return renderTable("Trend", []interface{}{"Window", "Metric", "Points", "Latest", "Min", "Avg", "Max", "From", "To"}, rows)
+}
+
 func renderLineChart(points []history.Point, sum history.Summary, since string, width, height int) string {
 	values := make([]float64, 0, len(points))
 	for _, point := range points {
@@ -429,6 +471,44 @@ func renderLineChart(points []history.Point, sum history.Summary, since string, 
 		opts = append(opts, asciigraph.LowerBound(sum.Min-1), asciigraph.UpperBound(sum.Max+1))
 	}
 	return asciigraph.Plot(values, opts...)
+}
+
+func renderRequestErrorChart(requestPoints, errorPoints []history.Point, since string, width, height int) string {
+	requests := pointValues(requestPoints)
+	errors := pointValues(errorPoints)
+	if len(errors) != len(requests) {
+		errors = alignSeries(errors, len(requests))
+	}
+	width = clamp(width, 20, 160)
+	height = clamp(height, 4, 40)
+	return asciigraph.PlotMany(
+		[][]float64{requests, errors},
+		asciigraph.Width(width),
+		asciigraph.Height(height),
+		asciigraph.Precision(2),
+		asciigraph.SeriesColors(asciigraph.Green, asciigraph.Red),
+		asciigraph.SeriesLegends("request_rate req/s", "error_rate err/s"),
+		asciigraph.Caption(fmt.Sprintf("request_rate and error_rate over %s", since)),
+	)
+}
+
+func pointValues(points []history.Point) []float64 {
+	values := make([]float64, 0, len(points))
+	for _, point := range points {
+		values = append(values, point.Value)
+	}
+	return values
+}
+
+func alignSeries(values []float64, want int) []float64 {
+	out := make([]float64, want)
+	copy(out, values)
+	return out
+}
+
+func isRequestRateMetric(metric string) bool {
+	metric = strings.TrimSpace(strings.ToLower(metric))
+	return metric == "" || metric == "request_rate" || metric == "requests_rate" || metric == "rps"
 }
 
 func renderKVTable(title string, rows []prettytable.Row) string {

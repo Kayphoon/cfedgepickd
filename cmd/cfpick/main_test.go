@@ -74,6 +74,37 @@ func TestRenderLineChart(t *testing.T) {
 	}
 }
 
+func TestRenderRequestErrorChart(t *testing.T) {
+	now := time.Unix(100, 0)
+	requests := []history.Point{
+		{Time: now, Value: 1},
+		{Time: now.Add(time.Minute), Value: 3},
+	}
+	errors := []history.Point{
+		{Time: now, Value: 0},
+		{Time: now.Add(time.Minute), Value: 0.2},
+	}
+
+	out := renderRequestErrorChart(requests, errors, "24h", 40, 8)
+	if !strings.Contains(out, "request_rate and error_rate over 24h") {
+		t.Fatalf("chart missing caption:\n%s", out)
+	}
+	if !strings.Contains(out, "request_rate req/s") || !strings.Contains(out, "error_rate err/s") {
+		t.Fatalf("chart missing legends:\n%s", out)
+	}
+}
+
+func TestIsRequestRateMetric(t *testing.T) {
+	for _, metric := range []string{"", "request_rate", "requests_rate", "rps"} {
+		if !isRequestRateMetric(metric) {
+			t.Fatalf("%q should be request-rate chart metric", metric)
+		}
+	}
+	if isRequestRateMetric("error_rate") {
+		t.Fatal("error_rate should not select the default combined chart")
+	}
+}
+
 func TestRenderOverviewUsesTable(t *testing.T) {
 	out := renderKVTable("Test", []prettytable.Row{{"A", "B"}})
 	if !strings.Contains(out, "Test") || !strings.Contains(out, "FIELD") {

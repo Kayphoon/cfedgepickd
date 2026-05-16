@@ -57,8 +57,9 @@ Each daemon cycle appends one JSONL record to `/var/lib/cfpick/history.jsonl`.
 The file path is configurable through `runtime.history_file`.
 
 Use `cfpick status` to show a terminal dashboard. It renders current health,
-cloudflared performance, active edge sockets, the latest sample, and a line chart
-for the selected metric:
+cloudflared performance, active edge sockets, the latest sample, and a time-ordered
+line chart. The default chart overlays request rate and error rate with different
+colors:
 
 ```bash
 cfpick status --metric request_rate --since 24h
