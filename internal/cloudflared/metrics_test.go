@@ -12,6 +12,23 @@ cloudflared_tunnel_ha_connections 2
 cloudflared_tunnel_concurrent_requests_per_tunnel 0
 cloudflared_tunnel_total_requests 123
 cloudflared_tunnel_request_errors 4
+cloudflared_tunnel_response_by_code{status_code="200"} 100
+cloudflared_tunnel_response_by_code{status_code="304"} 10
+cloudflared_tunnel_response_by_code{status_code="404"} 2
+cloudflared_tunnel_response_by_code{status_code="500"} 1
+cloudflared_proxy_connect_latency_sum 50
+cloudflared_proxy_connect_latency_count 2
+cloudflared_tcp_active_sessions 3
+cloudflared_tcp_total_sessions 9
+cloudflared_udp_active_sessions 4
+cloudflared_udp_total_sessions 10
+process_cpu_seconds_total 12.5
+process_resident_memory_bytes 10485760
+process_network_receive_bytes_total 1000
+process_network_transmit_bytes_total 2000
+go_goroutines 48
+go_threads 9
+go_memstats_heap_alloc_bytes 5242880
 cloudflared_tunnel_server_locations{connection_id="0",edge_location="lax01"} 1
 cloudflared_tunnel_server_locations{connection_id="1",edge_location="lax05"} 1
 `
@@ -21,6 +38,24 @@ cloudflared_tunnel_server_locations{connection_id="1",edge_location="lax05"} 1
 	}
 	if m.HAConnections != 2 || m.ConcurrentRequests != 0 || m.TotalRequests != 123 || m.RequestErrors != 4 {
 		t.Fatalf("unexpected metrics: %+v", m)
+	}
+	if m.Response2xx != 100 || m.Response3xx != 10 || m.Response4xx != 2 || m.Response5xx != 1 {
+		t.Fatalf("unexpected response classes: %+v", m)
+	}
+	if m.ResponseByCode["500"] != 1 {
+		t.Fatalf("unexpected response codes: %+v", m.ResponseByCode)
+	}
+	if m.ProxyConnectLatencySum != 50 || m.ProxyConnectLatencyHits != 2 {
+		t.Fatalf("unexpected proxy latency: %+v", m)
+	}
+	if m.TCPActiveSessions != 3 || m.TCPTotalSessions != 9 || m.UDPActiveSessions != 4 || m.UDPTotalSessions != 10 {
+		t.Fatalf("unexpected sessions: %+v", m)
+	}
+	if m.ProcessCPUSeconds != 12.5 || m.ProcessRSSBytes != 10485760 || m.ProcessNetworkRxBytes != 1000 || m.ProcessNetworkTxBytes != 2000 {
+		t.Fatalf("unexpected process metrics: %+v", m)
+	}
+	if m.GoGoroutines != 48 || m.GoThreads != 9 || m.GoHeapAllocBytes != 5242880 {
+		t.Fatalf("unexpected go runtime metrics: %+v", m)
 	}
 	if m.ServerLocations["0"] != "lax01" || m.ServerLocations["1"] != "lax05" {
 		t.Fatalf("unexpected locations: %+v", m.ServerLocations)

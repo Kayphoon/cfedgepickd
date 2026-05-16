@@ -14,12 +14,30 @@ import (
 )
 
 type Metrics struct {
-	HAConnections      int
-	ConcurrentRequests int
-	TotalRequests      float64
-	RequestErrors      float64
-	ServerLocations    map[string]string
-	Raw                map[string]float64
+	HAConnections           int
+	ConcurrentRequests      int
+	TotalRequests           float64
+	RequestErrors           float64
+	ResponseByCode          map[string]float64
+	Response2xx             float64
+	Response3xx             float64
+	Response4xx             float64
+	Response5xx             float64
+	ProxyConnectLatencySum  float64
+	ProxyConnectLatencyHits float64
+	TCPActiveSessions       float64
+	TCPTotalSessions        float64
+	UDPActiveSessions       float64
+	UDPTotalSessions        float64
+	ProcessCPUSeconds       float64
+	ProcessRSSBytes         float64
+	ProcessNetworkRxBytes   float64
+	ProcessNetworkTxBytes   float64
+	GoGoroutines            float64
+	GoThreads               float64
+	GoHeapAllocBytes        float64
+	ServerLocations         map[string]string
+	Raw                     map[string]float64
 }
 
 type Ready struct {
@@ -52,7 +70,7 @@ func FetchMetrics(ctx context.Context, url string) (Metrics, error) {
 }
 
 func ParseMetrics(r io.Reader) (Metrics, error) {
-	m := Metrics{Raw: map[string]float64{}, ServerLocations: map[string]string{}}
+	m := Metrics{Raw: map[string]float64{}, ResponseByCode: map[string]float64{}, ServerLocations: map[string]string{}}
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -64,16 +82,58 @@ func ParseMetrics(r io.Reader) (Metrics, error) {
 			continue
 		}
 		m.Raw[name] = value
+		base := metricBase(name)
 		switch {
-		case name == "cloudflared_tunnel_ha_connections":
+		case base == "cloudflared_tunnel_ha_connections":
 			m.HAConnections = int(value)
-		case name == "cloudflared_tunnel_concurrent_requests_per_tunnel":
+		case base == "cloudflared_tunnel_concurrent_requests_per_tunnel":
 			m.ConcurrentRequests = int(value)
-		case name == "cloudflared_tunnel_total_requests":
+		case base == "cloudflared_tunnel_total_requests":
 			m.TotalRequests = value
-		case name == "cloudflared_tunnel_request_errors":
+		case base == "cloudflared_tunnel_request_errors":
 			m.RequestErrors = value
-		case strings.HasPrefix(name, "cloudflared_tunnel_server_locations"):
+		case base == "cloudflared_tunnel_response_by_code":
+			code := labelValue(name, "status_code")
+			if code != "" {
+				m.ResponseByCode[code] = value
+				switch {
+				case strings.HasPrefix(code, "2"):
+					m.Response2xx += value
+				case strings.HasPrefix(code, "3"):
+					m.Response3xx += value
+				case strings.HasPrefix(code, "4"):
+					m.Response4xx += value
+				case strings.HasPrefix(code, "5"):
+					m.Response5xx += value
+				}
+			}
+		case base == "cloudflared_proxy_connect_latency_sum":
+			m.ProxyConnectLatencySum = value
+		case base == "cloudflared_proxy_connect_latency_count":
+			m.ProxyConnectLatencyHits = value
+		case base == "cloudflared_tcp_active_sessions":
+			m.TCPActiveSessions = value
+		case base == "cloudflared_tcp_total_sessions":
+			m.TCPTotalSessions = value
+		case base == "cloudflared_udp_active_sessions":
+			m.UDPActiveSessions = value
+		case base == "cloudflared_udp_total_sessions":
+			m.UDPTotalSessions = value
+		case base == "process_cpu_seconds_total":
+			m.ProcessCPUSeconds = value
+		case base == "process_resident_memory_bytes":
+			m.ProcessRSSBytes = value
+		case base == "process_network_receive_bytes_total":
+			m.ProcessNetworkRxBytes = value
+		case base == "process_network_transmit_bytes_total":
+			m.ProcessNetworkTxBytes = value
+		case base == "go_goroutines":
+			m.GoGoroutines = value
+		case base == "go_threads":
+			m.GoThreads = value
+		case base == "go_memstats_heap_alloc_bytes":
+			m.GoHeapAllocBytes = value
+		case base == "cloudflared_tunnel_server_locations":
 			if value == 1 {
 				conn := labelValue(name, "connection_id")
 				loc := labelValue(name, "edge_location")
@@ -84,6 +144,13 @@ func ParseMetrics(r io.Reader) (Metrics, error) {
 		}
 	}
 	return m, sc.Err()
+}
+
+func metricBase(name string) string {
+	if i := strings.IndexByte(name, '{'); i >= 0 {
+		return name[:i]
+	}
+	return name
 }
 
 func splitMetric(line string) (string, float64, bool) {

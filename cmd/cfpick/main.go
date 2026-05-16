@@ -54,7 +54,7 @@ func main() {
 func statusCmd(args []string) {
 	fs := flag.NewFlagSet("status", flag.ExitOnError)
 	configPath := fs.String("config", "", "config file")
-	metric := fs.String("metric", "rtt", "rtt, ready, ha, concurrent, request_delta, error_delta, degraded, idle")
+	metric := fs.String("metric", "request_rate", "request_rate, error_rate, response_5xx_delta, rss_mb, goroutines, cpu_percent, network_rx_rate, rtt")
 	since := fs.String("since", "24h", "history window, for example 24h or 7d")
 	width := fs.Int("width", 80, "graph width")
 	height := fs.Int("height", 12, "graph height")
@@ -88,6 +88,8 @@ func statusCmd(args []string) {
 	fmt.Println(renderOverview(path, cfg, historyPath, *metric, *since))
 	fmt.Println()
 	fmt.Println(renderHealth(ready, readyErr, metrics, metricsErr))
+	fmt.Println()
+	fmt.Println(renderPerformance(metrics, metricsErr, records, time.Now()))
 	fmt.Println()
 	fmt.Println(renderEdges(conns, edgesErr))
 
@@ -301,6 +303,58 @@ func renderHealth(ready cloudflared.Ready, readyErr error, metrics cloudflared.M
 	return renderTable("Health", []interface{}{"Signal", "State", "Detail"}, rows)
 }
 
+func renderPerformance(metrics cloudflared.Metrics, metricsErr error, records []history.Record, now time.Time) string {
+	if metricsErr != nil {
+		return renderTable("Performance", []interface{}{"Signal", "State", "Detail"}, []prettytable.Row{
+			{"Metrics", "UNKNOWN", metricsErr.Error()},
+		})
+	}
+	delta := performanceSinceLast(metrics, records, now)
+	rows := []prettytable.Row{
+		{
+			"Requests",
+			activityLabel(delta.RequestRate),
+			fmt.Sprintf("%s, +%.0f since sample, total=%.0f", formatPerSecond(delta.RequestRate, "req"), delta.RequestDelta, metrics.TotalRequests),
+		},
+		{
+			"Errors",
+			statusLabel(delta.ErrorDelta == 0),
+			fmt.Sprintf("%s, +%.0f since sample, total=%.0f", formatPerSecond(delta.ErrorRate, "err"), delta.ErrorDelta, metrics.RequestErrors),
+		},
+		{
+			"HTTP Codes",
+			statusLabel(delta.Response5xxDelta == 0),
+			fmt.Sprintf("2xx=%.0f 3xx=%.0f 4xx=%.0f 5xx=%.0f, delta_5xx=%.0f", metrics.Response2xx, metrics.Response3xx, metrics.Response4xx, metrics.Response5xx, delta.Response5xxDelta),
+		},
+		{
+			"Connect Latency",
+			availabilityLabel(metrics.ProxyConnectLatencyHits > 0),
+			fmt.Sprintf("avg=%s samples=%.0f", formatMS(delta.ProxyConnectAvgMS), metrics.ProxyConnectLatencyHits),
+		},
+		{
+			"Sessions",
+			activityLabel(metrics.TCPActiveSessions + metrics.UDPActiveSessions),
+			fmt.Sprintf("tcp_active=%.0f tcp_total=%.0f udp_active=%.0f udp_total=%.0f", metrics.TCPActiveSessions, metrics.TCPTotalSessions, metrics.UDPActiveSessions, metrics.UDPTotalSessions),
+		},
+		{
+			"Runtime",
+			"OK",
+			fmt.Sprintf("rss=%s heap=%s goroutines=%.0f threads=%.0f cpu=%s", formatBytes(metrics.ProcessRSSBytes), formatBytes(metrics.GoHeapAllocBytes), metrics.GoGoroutines, metrics.GoThreads, formatPercent(delta.CPUPercent)),
+		},
+		{
+			"Network",
+			activityLabel(delta.NetworkRxRate + delta.NetworkTxRate),
+			fmt.Sprintf("rx=%s (%s) tx=%s (%s)", formatBytes(metrics.ProcessNetworkRxBytes), formatBytesPerSecond(delta.NetworkRxRate), formatBytes(metrics.ProcessNetworkTxBytes), formatBytesPerSecond(delta.NetworkTxRate)),
+		},
+	}
+	if delta.HasLast {
+		rows = append(rows, prettytable.Row{"Sample Gap", "INFO", delta.Elapsed.Round(time.Second).String()})
+	} else {
+		rows = append(rows, prettytable.Row{"Sample Gap", "INFO", "no previous history sample"})
+	}
+	return renderTable("Performance", []interface{}{"Signal", "State", "Detail"}, rows)
+}
+
 func renderEdges(conns []cloudflared.EdgeConnection, err error) string {
 	if err != nil {
 		return renderTable("Current Edges", []interface{}{"State", "Detail"}, []prettytable.Row{
@@ -327,6 +381,8 @@ func renderLatest(r history.Record) string {
 		{"Top RTT", formatMS(r.TopMedianMS)},
 		{"Ready / HA", fmt.Sprintf("%d / %d", r.ReadyConnections, r.HAConnections)},
 		{"Requests / Errors", fmt.Sprintf("%.0f / %.0f", r.TotalRequests, r.RequestErrors)},
+		{"HTTP 2xx/3xx/4xx/5xx", fmt.Sprintf("%.0f / %.0f / %.0f / %.0f", r.Response2xx, r.Response3xx, r.Response4xx, r.Response5xx)},
+		{"RSS / Goroutines", fmt.Sprintf("%s / %.0f", formatBytes(r.ProcessRSSBytes), r.GoGoroutines)},
 		{"Idle", yesNo(r.Idle)},
 		{"Degraded", yesNo(r.Degraded)},
 		{"Should Switch", yesNo(r.ShouldSwitch)},
@@ -402,6 +458,20 @@ func trafficLabel(concurrent int) string {
 	return "ACTIVE"
 }
 
+func activityLabel(v float64) string {
+	if v == 0 {
+		return "IDLE"
+	}
+	return "ACTIVE"
+}
+
+func availabilityLabel(v bool) string {
+	if v {
+		return "OK"
+	}
+	return "N/A"
+}
+
 func errorLabel(errors float64) string {
 	if errors > 0 {
 		return "SEEN"
@@ -430,11 +500,96 @@ func formatMS(v float64) string {
 	return fmt.Sprintf("%.2f ms", v)
 }
 
+func formatPercent(v float64) string {
+	return fmt.Sprintf("%.2f%%", v)
+}
+
+func formatPerSecond(v float64, unit string) string {
+	return fmt.Sprintf("%.2f %s/s", v, unit)
+}
+
+func formatBytesPerSecond(v float64) string {
+	return formatBytes(v) + "/s"
+}
+
+func formatBytes(v float64) string {
+	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
+	for _, unit := range units {
+		if v < 1024 || unit == units[len(units)-1] {
+			if unit == "B" {
+				return fmt.Sprintf("%.0f %s", v, unit)
+			}
+			return fmt.Sprintf("%.2f %s", v, unit)
+		}
+		v /= 1024
+	}
+	return "0 B"
+}
+
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return "-"
 	}
 	return t.Local().Format("2006-01-02 15:04:05")
+}
+
+type performanceDelta struct {
+	HasLast           bool
+	Elapsed           time.Duration
+	RequestDelta      float64
+	RequestRate       float64
+	ErrorDelta        float64
+	ErrorRate         float64
+	Response5xxDelta  float64
+	ProxyConnectAvgMS float64
+	CPUPercent        float64
+	NetworkRxRate     float64
+	NetworkTxRate     float64
+}
+
+func performanceSinceLast(metrics cloudflared.Metrics, records []history.Record, now time.Time) performanceDelta {
+	d := performanceDelta{}
+	if metrics.ProxyConnectLatencyHits > 0 {
+		d.ProxyConnectAvgMS = metrics.ProxyConnectLatencySum / metrics.ProxyConnectLatencyHits
+	}
+	if len(records) == 0 {
+		return d
+	}
+	last := records[len(records)-1]
+	elapsed := now.Sub(last.Time)
+	if elapsed <= 0 {
+		return d
+	}
+	seconds := elapsed.Seconds()
+	d.HasLast = true
+	d.Elapsed = elapsed
+	d.RequestDelta = nonNegativeDelta(metrics.TotalRequests, last.TotalRequests)
+	d.RequestRate = d.RequestDelta / seconds
+	d.ErrorDelta = nonNegativeDelta(metrics.RequestErrors, last.RequestErrors)
+	d.ErrorRate = d.ErrorDelta / seconds
+	if last.ResponseByCode != nil || last.Response2xx != 0 || last.Response3xx != 0 || last.Response4xx != 0 || last.Response5xx != 0 {
+		d.Response5xxDelta = nonNegativeDelta(metrics.Response5xx, last.Response5xx)
+	}
+	if metrics.ProxyConnectLatencyHits > last.ProxyConnectLatencyHits {
+		d.ProxyConnectAvgMS = nonNegativeDelta(metrics.ProxyConnectLatencySum, last.ProxyConnectLatencySum) / nonNegativeDelta(metrics.ProxyConnectLatencyHits, last.ProxyConnectLatencyHits)
+	}
+	if last.ProcessCPUSeconds > 0 {
+		d.CPUPercent = 100 * nonNegativeDelta(metrics.ProcessCPUSeconds, last.ProcessCPUSeconds) / seconds
+	}
+	if last.ProcessNetworkRxBytes > 0 {
+		d.NetworkRxRate = nonNegativeDelta(metrics.ProcessNetworkRxBytes, last.ProcessNetworkRxBytes) / seconds
+	}
+	if last.ProcessNetworkTxBytes > 0 {
+		d.NetworkTxRate = nonNegativeDelta(metrics.ProcessNetworkTxBytes, last.ProcessNetworkTxBytes) / seconds
+	}
+	return d
+}
+
+func nonNegativeDelta(now, before float64) float64 {
+	if now < before {
+		return 0
+	}
+	return now - before
 }
 
 func clamp(v, min, max int) int {

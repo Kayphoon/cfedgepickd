@@ -80,3 +80,32 @@ func TestRenderOverviewUsesTable(t *testing.T) {
 		t.Fatalf("unexpected table:\n%s", out)
 	}
 }
+
+func TestPerformanceSinceLast(t *testing.T) {
+	now := time.Unix(200, 0)
+	records := []history.Record{{
+		Time:                  now.Add(-10 * time.Second),
+		TotalRequests:         100,
+		RequestErrors:         1,
+		Response5xx:           3,
+		ProcessCPUSeconds:     10,
+		ProcessNetworkRxBytes: 1000,
+		ProcessNetworkTxBytes: 2000,
+	}}
+	metrics := cloudflared.Metrics{
+		TotalRequests:         120,
+		RequestErrors:         2,
+		Response5xx:           4,
+		ProcessCPUSeconds:     11,
+		ProcessNetworkRxBytes: 2000,
+		ProcessNetworkTxBytes: 5000,
+	}
+
+	got := performanceSinceLast(metrics, records, now)
+	if !got.HasLast || got.RequestRate != 2 || got.ErrorRate != 0.1 || got.Response5xxDelta != 1 {
+		t.Fatalf("unexpected performance delta: %+v", got)
+	}
+	if got.CPUPercent != 10 || got.NetworkRxRate != 100 || got.NetworkTxRate != 300 {
+		t.Fatalf("unexpected runtime delta: %+v", got)
+	}
+}

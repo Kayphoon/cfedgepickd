@@ -33,6 +33,44 @@ func TestSeriesRequestDelta(t *testing.T) {
 	}
 }
 
+func TestSeriesRequestRate(t *testing.T) {
+	now := time.Unix(100, 0)
+	records := []Record{
+		{Time: now, TotalRequests: 10},
+		{Time: now.Add(10 * time.Second), TotalRequests: 30},
+	}
+
+	points, sum, err := Series(records, "request_rate")
+	if err != nil {
+		t.Fatalf("Series returned error: %v", err)
+	}
+	if len(points) != 2 {
+		t.Fatalf("points=%d", len(points))
+	}
+	if points[0].Value != 0 || points[1].Value != 2 {
+		t.Fatalf("points=%+v", points)
+	}
+	if sum.Metric != "request_rate" || sum.Latest != 2 {
+		t.Fatalf("summary=%+v", sum)
+	}
+}
+
+func TestSeriesResponse5xxDelta(t *testing.T) {
+	now := time.Unix(100, 0)
+	records := []Record{
+		{Time: now, Response5xx: 10},
+		{Time: now.Add(time.Minute), Response5xx: 12},
+	}
+
+	points, _, err := Series(records, "5xx_delta")
+	if err != nil {
+		t.Fatalf("Series returned error: %v", err)
+	}
+	if points[1].Value != 2 {
+		t.Fatalf("points=%+v", points)
+	}
+}
+
 func TestSeriesMetricAliases(t *testing.T) {
 	records := []Record{{Time: time.Unix(100, 0), TopMedianMS: 42}}
 

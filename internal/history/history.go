@@ -13,25 +13,43 @@ import (
 )
 
 type Record struct {
-	Time               time.Time `json:"time"`
-	ConfigProtocol     string    `json:"config_protocol"`
-	EffectiveProtocol  string    `json:"effective_protocol"`
-	ReadyConnections   int       `json:"ready_connections"`
-	HAConnections      int       `json:"ha_connections"`
-	ConcurrentRequests int       `json:"concurrent_requests"`
-	TotalRequests      float64   `json:"total_requests"`
-	RequestErrors      float64   `json:"request_errors"`
-	TopMedianMS        float64   `json:"top_median_ms"`
-	TopIP              string    `json:"top_ip,omitempty"`
-	TopIPs             []string  `json:"top_ips,omitempty"`
-	CurrentIPs         []string  `json:"current_ips,omitempty"`
-	Idle               bool      `json:"idle"`
-	DegradedRaw        bool      `json:"degraded_raw"`
-	Degraded           bool      `json:"degraded"`
-	ShouldSwitch       bool      `json:"should_switch"`
-	SwitchApplied      bool      `json:"switch_applied"`
-	SwitchError        string    `json:"switch_error,omitempty"`
-	Reason             string    `json:"reason,omitempty"`
+	Time                    time.Time          `json:"time"`
+	ConfigProtocol          string             `json:"config_protocol"`
+	EffectiveProtocol       string             `json:"effective_protocol"`
+	ReadyConnections        int                `json:"ready_connections"`
+	HAConnections           int                `json:"ha_connections"`
+	ConcurrentRequests      int                `json:"concurrent_requests"`
+	TotalRequests           float64            `json:"total_requests"`
+	RequestErrors           float64            `json:"request_errors"`
+	ResponseByCode          map[string]float64 `json:"response_by_code,omitempty"`
+	Response2xx             float64            `json:"response_2xx"`
+	Response3xx             float64            `json:"response_3xx"`
+	Response4xx             float64            `json:"response_4xx"`
+	Response5xx             float64            `json:"response_5xx"`
+	ProxyConnectLatencySum  float64            `json:"proxy_connect_latency_sum"`
+	ProxyConnectLatencyHits float64            `json:"proxy_connect_latency_hits"`
+	TCPActiveSessions       float64            `json:"tcp_active_sessions"`
+	TCPTotalSessions        float64            `json:"tcp_total_sessions"`
+	UDPActiveSessions       float64            `json:"udp_active_sessions"`
+	UDPTotalSessions        float64            `json:"udp_total_sessions"`
+	ProcessCPUSeconds       float64            `json:"process_cpu_seconds"`
+	ProcessRSSBytes         float64            `json:"process_rss_bytes"`
+	ProcessNetworkRxBytes   float64            `json:"process_network_rx_bytes"`
+	ProcessNetworkTxBytes   float64            `json:"process_network_tx_bytes"`
+	GoGoroutines            float64            `json:"go_goroutines"`
+	GoThreads               float64            `json:"go_threads"`
+	GoHeapAllocBytes        float64            `json:"go_heap_alloc_bytes"`
+	TopMedianMS             float64            `json:"top_median_ms"`
+	TopIP                   string             `json:"top_ip,omitempty"`
+	TopIPs                  []string           `json:"top_ips,omitempty"`
+	CurrentIPs              []string           `json:"current_ips,omitempty"`
+	Idle                    bool               `json:"idle"`
+	DegradedRaw             bool               `json:"degraded_raw"`
+	Degraded                bool               `json:"degraded"`
+	ShouldSwitch            bool               `json:"should_switch"`
+	SwitchApplied           bool               `json:"switch_applied"`
+	SwitchError             string             `json:"switch_error,omitempty"`
+	Reason                  string             `json:"reason,omitempty"`
 }
 
 type Point struct {
@@ -158,6 +176,8 @@ func metricValue(r, last Record, hasLast bool, metric string) (float64, bool) {
 			return 0, true
 		}
 		return nonNegativeDelta(r.TotalRequests, last.TotalRequests), true
+	case "request_rate":
+		return nonNegativeRate(r.TotalRequests, last.TotalRequests, r.Time, last.Time, hasLast), true
 	case "errors":
 		return r.RequestErrors, true
 	case "error_delta":
@@ -165,6 +185,76 @@ func metricValue(r, last Record, hasLast bool, metric string) (float64, bool) {
 			return 0, true
 		}
 		return nonNegativeDelta(r.RequestErrors, last.RequestErrors), true
+	case "error_rate":
+		return nonNegativeRate(r.RequestErrors, last.RequestErrors, r.Time, last.Time, hasLast), true
+	case "response_2xx", "2xx":
+		return r.Response2xx, true
+	case "response_3xx", "3xx":
+		return r.Response3xx, true
+	case "response_4xx", "4xx":
+		return r.Response4xx, true
+	case "response_5xx", "5xx":
+		return r.Response5xx, true
+	case "response_2xx_delta", "2xx_delta":
+		if !hasLast {
+			return 0, true
+		}
+		return nonNegativeDelta(r.Response2xx, last.Response2xx), true
+	case "response_3xx_delta", "3xx_delta":
+		if !hasLast {
+			return 0, true
+		}
+		return nonNegativeDelta(r.Response3xx, last.Response3xx), true
+	case "response_4xx_delta", "4xx_delta":
+		if !hasLast {
+			return 0, true
+		}
+		return nonNegativeDelta(r.Response4xx, last.Response4xx), true
+	case "response_5xx_delta", "5xx_delta":
+		if !hasLast {
+			return 0, true
+		}
+		return nonNegativeDelta(r.Response5xx, last.Response5xx), true
+	case "response_5xx_rate", "5xx_rate":
+		return nonNegativeRate(r.Response5xx, last.Response5xx, r.Time, last.Time, hasLast), true
+	case "proxy_connect_avg_ms":
+		if hasLast {
+			count := r.ProxyConnectLatencyHits - last.ProxyConnectLatencyHits
+			if count > 0 {
+				return nonNegativeDelta(r.ProxyConnectLatencySum, last.ProxyConnectLatencySum) / count, true
+			}
+		}
+		if r.ProxyConnectLatencyHits > 0 {
+			return r.ProxyConnectLatencySum / r.ProxyConnectLatencyHits, true
+		}
+		return 0, true
+	case "tcp_active":
+		return r.TCPActiveSessions, true
+	case "tcp_total":
+		return r.TCPTotalSessions, true
+	case "udp_active":
+		return r.UDPActiveSessions, true
+	case "udp_total":
+		return r.UDPTotalSessions, true
+	case "cpu_percent":
+		if !hasLast {
+			return 0, true
+		}
+		elapsed := r.Time.Sub(last.Time).Seconds()
+		if elapsed <= 0 {
+			return 0, true
+		}
+		return 100 * nonNegativeDelta(r.ProcessCPUSeconds, last.ProcessCPUSeconds) / elapsed, true
+	case "rss_mb", "memory_mb":
+		return bytesToMB(r.ProcessRSSBytes), true
+	case "heap_mb":
+		return bytesToMB(r.GoHeapAllocBytes), true
+	case "goroutines":
+		return r.GoGoroutines, true
+	case "network_rx_rate":
+		return nonNegativeRate(r.ProcessNetworkRxBytes, last.ProcessNetworkRxBytes, r.Time, last.Time, hasLast), true
+	case "network_tx_rate":
+		return nonNegativeRate(r.ProcessNetworkTxBytes, last.ProcessNetworkTxBytes, r.Time, last.Time, hasLast), true
 	case "rtt":
 		return r.TopMedianMS, r.TopMedianMS > 0
 	case "degraded":
@@ -197,10 +287,54 @@ func normalizeMetric(metric string) (string, bool) {
 		return "requests", true
 	case "request_delta", "requests_delta":
 		return "request_delta", true
+	case "request_rate", "requests_rate", "rps":
+		return "request_rate", true
 	case "errors", "request_errors":
 		return "errors", true
 	case "error_delta", "errors_delta":
 		return "error_delta", true
+	case "error_rate", "errors_rate":
+		return "error_rate", true
+	case "response_2xx", "2xx":
+		return "response_2xx", true
+	case "response_3xx", "3xx":
+		return "response_3xx", true
+	case "response_4xx", "4xx":
+		return "response_4xx", true
+	case "response_5xx", "5xx":
+		return "response_5xx", true
+	case "response_2xx_delta", "2xx_delta":
+		return "response_2xx_delta", true
+	case "response_3xx_delta", "3xx_delta":
+		return "response_3xx_delta", true
+	case "response_4xx_delta", "4xx_delta":
+		return "response_4xx_delta", true
+	case "response_5xx_delta", "5xx_delta":
+		return "response_5xx_delta", true
+	case "response_5xx_rate", "5xx_rate":
+		return "response_5xx_rate", true
+	case "proxy_connect_avg_ms", "connect_latency":
+		return "proxy_connect_avg_ms", true
+	case "tcp_active":
+		return "tcp_active", true
+	case "tcp_total":
+		return "tcp_total", true
+	case "udp_active":
+		return "udp_active", true
+	case "udp_total":
+		return "udp_total", true
+	case "cpu_percent", "cpu":
+		return "cpu_percent", true
+	case "rss_mb", "memory_mb":
+		return "rss_mb", true
+	case "heap_mb":
+		return "heap_mb", true
+	case "goroutines":
+		return "goroutines", true
+	case "network_rx_rate", "rx_rate":
+		return "network_rx_rate", true
+	case "network_tx_rate", "tx_rate":
+		return "network_tx_rate", true
 	case "degraded":
 		return "degraded", true
 	case "idle":
@@ -215,6 +349,21 @@ func nonNegativeDelta(now, before float64) float64 {
 		return 0
 	}
 	return now - before
+}
+
+func nonNegativeRate(now, before float64, nowTime, beforeTime time.Time, hasLast bool) float64 {
+	if !hasLast {
+		return 0
+	}
+	elapsed := nowTime.Sub(beforeTime).Seconds()
+	if elapsed <= 0 {
+		return 0
+	}
+	return nonNegativeDelta(now, before) / elapsed
+}
+
+func bytesToMB(v float64) float64 {
+	return v / 1024 / 1024
 }
 
 func RenderASCII(points []Point, sum Summary, width, height int) (string, error) {
