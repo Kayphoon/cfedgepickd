@@ -1,0 +1,6 @@
+cfedgepickd
+cfedgepickctl
+dist/
+*.test
+*.out
+coverage.txt

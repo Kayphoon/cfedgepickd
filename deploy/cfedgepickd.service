@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloudflare edge IP picker for cloudflared
+After=network-online.target cloudflared.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cfedgepickd run --config /etc/cfedgepickd/config.json
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
+
