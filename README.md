@@ -20,6 +20,10 @@ QUIC probing uses the same edge TLS server name as `cloudflared` itself:
 `quic.cftunnel.com`. The `region*.v2.argotunnel.com` names are the edge hostnames
 that `/etc/hosts` pins, not the QUIC TLS SNI.
 
+Cloudflare Tunnel QUIC edge presents a Cloudflare Origin certificate. The probe
+therefore validates the expected `argotunnel` ALPN and Cloudflare Origin certificate
+shape instead of requiring a public-web CA chain.
+
 Not supported in v1:
 
 - OpenWrt / non-systemd service managers
