@@ -95,6 +95,9 @@ func runMode(ctx context.Context, cfg config.Config, mode Mode) (Report, error) 
 	if concurrency <= 0 {
 		concurrency = 64
 	}
+	if mode == ModeQUIC && concurrency > 16 {
+		concurrency = 16
+	}
 
 	jobs := make(chan string)
 	results := make(chan Result, len(items))
@@ -104,7 +107,7 @@ func runMode(ctx context.Context, cfg config.Config, mode Mode) (Report, error) 
 		go func() {
 			defer wg.Done()
 			for ip := range jobs {
-				results <- probeIP(ctx, ip, cfg.Edge.Port, cfg.Edge.ServerName, mode, rounds, timeout)
+				results <- safeProbeIP(ctx, ip, cfg.Edge.Port, cfg.Edge.ServerName, mode, rounds, timeout)
 			}
 		}()
 	}
@@ -203,6 +206,22 @@ func expandPrefix(p netip.Prefix, max int) []string {
 		addr = next
 	}
 	return out
+}
+
+func safeProbeIP(ctx context.Context, ip string, port int, serverName string, mode Mode, rounds int, timeout time.Duration) (result Result) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = summarize(nil)
+			result.IP = ip
+			result.Protocol = string(mode)
+			result.OK = 0
+			result.Fail = rounds
+			result.When = time.Now().UTC()
+			result.Errors = []string{fmt.Sprintf("probe panic: %v", r)}
+			result.Score = score(result)
+		}
+	}()
+	return probeIP(ctx, ip, port, serverName, mode, rounds, timeout)
 }
 
 func probeIP(ctx context.Context, ip string, port int, serverName string, mode Mode, rounds int, timeout time.Duration) Result {
