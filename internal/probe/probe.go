@@ -261,6 +261,7 @@ func probeQUIC(ctx context.Context, ip string, port int, serverName string, time
 	}, &quic.Config{
 		HandshakeIdleTimeout: timeout,
 		MaxIdleTimeout:       timeout,
+		EnableDatagrams:      true,
 	})
 	if err != nil {
 		return 0, err

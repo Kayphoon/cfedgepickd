@@ -69,6 +69,7 @@ func probeCmd(args []string) {
 	}
 	rep, err := probe.Run(context.Background(), cfg, probe.Mode(cfg.Cloudflared.Protocol))
 	if err != nil {
+		printJSON(rep, *pretty)
 		log.Fatalf("probe failed: %v", err)
 	}
 	printJSON(rep, *pretty)
