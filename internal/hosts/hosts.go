@@ -110,7 +110,7 @@ func Update(path, backupDir string, mappings []Mapping) (string, error) {
 	if !strings.HasSuffix(next, "\n") {
 		next += "\n"
 	}
-	tmp := path + ".cfedgepickd.tmp"
+	tmp := path + ".cfpick.tmp"
 	if err := os.WriteFile(tmp, []byte(next), 0644); err != nil {
 		return backup, err
 	}
@@ -129,7 +129,7 @@ func Restore(path, backup string) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".cfedgepickd.restore.tmp"
+	tmp := path + ".cfpick.restore.tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return err
 	}

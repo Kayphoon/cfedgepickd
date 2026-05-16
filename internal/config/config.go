@@ -13,6 +13,11 @@ const (
 	ProtocolHTTP2 = "http2"
 
 	CloudflaredQUICServerName = "quic.cftunnel.com"
+
+	DefaultConfigPath = "/etc/cfpick/config.json"
+	DefaultBinaryPath = "/usr/local/bin/cfpick"
+	DefaultUnitPath   = "/etc/systemd/system/cfpick.service"
+	LegacyConfigPath  = "/etc/cfedgepickd/config.json"
 )
 
 var DefaultHostnames = []string{
@@ -129,9 +134,9 @@ func Default() Config {
 		},
 		Runtime: RuntimeConfig{
 			HostsFile:   "/etc/hosts",
-			BackupDir:   "/var/backups/cfedgepickd",
-			StateFile:   "/var/lib/cfedgepickd/state.json",
-			HistoryFile: "/var/lib/cfedgepickd/history.jsonl",
+			BackupDir:   "/var/backups/cfpick",
+			StateFile:   "/var/lib/cfpick/state.json",
+			HistoryFile: "/var/lib/cfpick/history.jsonl",
 			LogLevel:    "info",
 			DryRun:      true,
 		},

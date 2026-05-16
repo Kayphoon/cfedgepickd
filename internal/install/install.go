@@ -54,7 +54,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 
 	configPath := opts.Config
 	if configPath == "" {
-		configPath = "/etc/cfedgepickd/config.json"
+		configPath = config.DefaultConfigPath
 	}
 	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
 		return rep, err
@@ -66,7 +66,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	}
 	unitPath := opts.UnitPath
 	if unitPath == "" {
-		unitPath = "/etc/systemd/system/cfedgepickd.service"
+		unitPath = config.DefaultUnitPath
 	}
 	if err := os.WriteFile(unitPath, []byte(RenderUnit(opts.Binary, configPath, cfg.Cloudflared.Service)), 0644); err != nil {
 		return rep, err
@@ -81,10 +81,10 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 
 func RenderUnit(binary, configPath, cloudflaredService string) string {
 	if binary == "" {
-		binary = "/usr/local/bin/cfedgepickd"
+		binary = config.DefaultBinaryPath
 	}
 	if configPath == "" {
-		configPath = "/etc/cfedgepickd/config.json"
+		configPath = config.DefaultConfigPath
 	}
 	if cloudflaredService == "" {
 		cloudflaredService = "cloudflared.service"
@@ -94,7 +94,7 @@ func RenderUnit(binary, configPath, cloudflaredService string) string {
 	}
 	lines := []string{
 		"[Unit]",
-		"Description=Cloudflare edge IP picker for cloudflared",
+		"Description=cfpick Cloudflare edge IP picker for cloudflared",
 		fmt.Sprintf("After=network-online.target %s", cloudflaredService),
 		"Wants=network-online.target",
 		"",
