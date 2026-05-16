@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -100,6 +101,8 @@ func statusCmd(args []string) {
 	}
 
 	latest := records[len(records)-1]
+	fmt.Println()
+	fmt.Println(renderEdgeComparison(latest, cfg.Switching.DegradedFactor))
 	fmt.Println()
 	fmt.Println(renderLatest(latest))
 
@@ -415,6 +418,109 @@ func renderLatest(r history.Record) string {
 		{"Switch Applied", yesNo(r.SwitchApplied)},
 		{"Reason", emptyDash(r.Reason)},
 	})
+}
+
+func renderEdgeComparison(r history.Record, degradedFactor float64) string {
+	rows := []prettytable.Row{}
+	best := bestMedianMS(r)
+	topRows := r.TopProbeResults
+	if len(topRows) == 0 && r.TopIP != "" {
+		topRows = []history.IPProbe{{
+			IP:       r.TopIP,
+			MedianMS: r.TopMedianMS,
+		}}
+	}
+	for i, p := range topRows {
+		rows = append(rows, edgeComparisonRow(fmt.Sprintf("TOP #%d", i+1), "TOP", p, best, degradedFactor))
+	}
+	currentRows := r.CurrentProbeResults
+	if len(currentRows) == 0 && len(r.CurrentIPs) > 0 {
+		for _, ip := range r.CurrentIPs {
+			currentRows = append(currentRows, history.IPProbe{IP: ip})
+		}
+	}
+	for i, p := range currentRows {
+		rows = append(rows, edgeComparisonRow(fmt.Sprintf("CURRENT #%d", i+1), "CURRENT", p, best, degradedFactor))
+	}
+	if len(rows) == 0 {
+		return renderTable("Edge Comparison", []interface{}{"Role", "State", "IP", "Median", "OK/Fail", "Vs Best", "Score"}, []prettytable.Row{
+			{"EMPTY", "UNKNOWN", "no probe comparison in latest sample", "-", "-", "-", "-"},
+		})
+	}
+	return renderTable("Edge Comparison", []interface{}{"Role", "State", "IP", "Median", "OK/Fail", "Vs Best", "Score"}, rows)
+}
+
+func edgeComparisonRow(role, kind string, p history.IPProbe, best, degradedFactor float64) prettytable.Row {
+	state := "UNKNOWN"
+	switch {
+	case p.MedianMS <= 0 && p.OK == 0 && p.Fail == 0:
+		state = "UNKNOWN"
+	case kind == "TOP":
+		state = "BEST"
+		if p.IP != "" && best > 0 && p.MedianMS > best {
+			state = "TOP"
+		}
+	case p.OK == 0 && p.Fail > 0:
+		state = "FAIL"
+	case best > 0 && degradedFactor > 0 && p.MedianMS > best*degradedFactor:
+		state = "SLOW"
+	default:
+		state = "OK"
+	}
+	return prettytable.Row{
+		role,
+		state,
+		emptyDash(p.IP),
+		formatMS(p.MedianMS),
+		okFailLabel(p.OK, p.Fail),
+		vsBestLabel(p.MedianMS, best),
+		scoreLabel(p.Score),
+	}
+}
+
+func bestMedianMS(r history.Record) float64 {
+	best := r.TopMedianMS
+	for _, p := range r.TopProbeResults {
+		if p.MedianMS > 0 && (best <= 0 || p.MedianMS < best) {
+			best = p.MedianMS
+		}
+	}
+	if best > 0 {
+		return best
+	}
+	for _, p := range r.CurrentProbeResults {
+		if p.MedianMS > 0 && (best <= 0 || p.MedianMS < best) {
+			best = p.MedianMS
+		}
+	}
+	return best
+}
+
+func okFailLabel(ok, fail int) string {
+	if ok == 0 && fail == 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%d/%d", ok, fail)
+}
+
+func scoreLabel(score float64) string {
+	if score <= 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%.2f", score)
+}
+
+func vsBestLabel(ms, best float64) string {
+	if ms <= 0 || best <= 0 {
+		return "-"
+	}
+	if ms <= best {
+		if math.Abs(ms-best) < 0.005 {
+			return "best"
+		}
+		return fmt.Sprintf("-%.2f ms / %.1fx", best-ms, best/ms)
+	}
+	return fmt.Sprintf("+%.2f ms / %.1fx", ms-best, ms/best)
 }
 
 func renderTrendSummary(sum history.Summary, since string) string {

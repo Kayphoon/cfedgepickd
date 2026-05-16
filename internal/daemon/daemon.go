@@ -157,6 +157,8 @@ func appendHistory(cfg config.Config, decision Decision, sw *switcher.Result, sw
 		GoHeapAllocBytes:        decision.Metrics.GoHeapAllocBytes,
 		TopIPs:                  decision.TopIPs,
 		CurrentIPs:              decision.CurrentIPs,
+		TopProbeResults:         probeSamples(decision.Probe.Top),
+		CurrentProbeResults:     currentProbeSamples(decision.CurrentIPs, decision.Probe.Results),
 		Idle:                    decision.Idle,
 		DegradedRaw:             decision.DegradedRaw,
 		Degraded:                decision.Degraded,
@@ -180,6 +182,46 @@ func appendHistory(cfg config.Config, decision Decision, sw *switcher.Result, sw
 		return err
 	}
 	return nil
+}
+
+func probeSamples(results []probe.Result) []history.IPProbe {
+	out := make([]history.IPProbe, 0, len(results))
+	for _, r := range results {
+		out = append(out, history.IPProbe{
+			IP:       r.IP,
+			Protocol: r.Protocol,
+			OK:       r.OK,
+			Fail:     r.Fail,
+			MedianMS: r.MedianMS,
+			MeanMS:   r.MeanMS,
+			MinMS:    r.MinMS,
+			MaxMS:    r.MaxMS,
+			Score:    r.Score,
+		})
+	}
+	return out
+}
+
+func currentProbeSamples(current []string, results []probe.Result) []history.IPProbe {
+	byIP := map[string]probe.Result{}
+	for _, r := range results {
+		byIP[r.IP] = r
+	}
+	out := make([]history.IPProbe, 0, len(current))
+	seen := map[string]bool{}
+	for _, ip := range current {
+		if ip == "" || seen[ip] {
+			continue
+		}
+		seen[ip] = true
+		r, ok := byIP[ip]
+		if !ok {
+			out = append(out, history.IPProbe{IP: ip})
+			continue
+		}
+		out = append(out, probeSamples([]probe.Result{r})...)
+	}
+	return out
 }
 
 func protocolForCloudflaredConfig(cfg config.Config, pr probe.Report) string {

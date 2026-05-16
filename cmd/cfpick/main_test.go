@@ -94,6 +94,39 @@ func TestRenderRequestErrorChart(t *testing.T) {
 	}
 }
 
+func TestRenderEdgeComparison(t *testing.T) {
+	r := history.Record{
+		TopProbeResults: []history.IPProbe{
+			{IP: "198.41.1.1", OK: 8, Fail: 0, MedianMS: 4, Score: 4.5},
+			{IP: "198.41.1.2", OK: 8, Fail: 0, MedianMS: 5, Score: 5.5},
+		},
+		CurrentProbeResults: []history.IPProbe{
+			{IP: "198.41.2.1", OK: 8, Fail: 0, MedianMS: 20, Score: 20.5},
+		},
+	}
+
+	out := renderEdgeComparison(r, 3)
+	if !strings.Contains(out, "Edge Comparison") || !strings.Contains(out, "CURRENT #1") {
+		t.Fatalf("comparison table missing expected rows:\n%s", out)
+	}
+	if !strings.Contains(out, "SLOW") || !strings.Contains(out, "+16.00 ms / 5.0x") {
+		t.Fatalf("comparison table missing slow delta:\n%s", out)
+	}
+}
+
+func TestRenderEdgeComparisonFallback(t *testing.T) {
+	r := history.Record{
+		TopIP:       "198.41.1.1",
+		TopMedianMS: 4,
+		CurrentIPs:  []string{"198.41.2.1"},
+	}
+
+	out := renderEdgeComparison(r, 3)
+	if !strings.Contains(out, "198.41.1.1") || !strings.Contains(out, "198.41.2.1") {
+		t.Fatalf("comparison table missing fallback IPs:\n%s", out)
+	}
+}
+
 func TestIsRequestRateMetric(t *testing.T) {
 	for _, metric := range []string{"", "request_rate", "requests_rate", "rps"} {
 		if !isRequestRateMetric(metric) {

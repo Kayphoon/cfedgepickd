@@ -43,6 +43,8 @@ type Record struct {
 	TopIP                   string             `json:"top_ip,omitempty"`
 	TopIPs                  []string           `json:"top_ips,omitempty"`
 	CurrentIPs              []string           `json:"current_ips,omitempty"`
+	TopProbeResults         []IPProbe          `json:"top_probe_results,omitempty"`
+	CurrentProbeResults     []IPProbe          `json:"current_probe_results,omitempty"`
 	Idle                    bool               `json:"idle"`
 	DegradedRaw             bool               `json:"degraded_raw"`
 	Degraded                bool               `json:"degraded"`
@@ -50,6 +52,18 @@ type Record struct {
 	SwitchApplied           bool               `json:"switch_applied"`
 	SwitchError             string             `json:"switch_error,omitempty"`
 	Reason                  string             `json:"reason,omitempty"`
+}
+
+type IPProbe struct {
+	IP       string  `json:"ip"`
+	Protocol string  `json:"protocol,omitempty"`
+	OK       int     `json:"ok"`
+	Fail     int     `json:"fail"`
+	MedianMS float64 `json:"median_ms"`
+	MeanMS   float64 `json:"mean_ms"`
+	MinMS    float64 `json:"min_ms"`
+	MaxMS    float64 `json:"max_ms"`
+	Score    float64 `json:"score"`
 }
 
 type Point struct {
