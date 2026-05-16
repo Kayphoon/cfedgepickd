@@ -253,10 +253,9 @@ func probeQUIC(ctx context.Context, ip string, port int, serverName string, time
 	defer cancel()
 	t0 := time.Now()
 	conn, err := quic.DialAddr(ctx, net.JoinHostPort(ip, fmt.Sprint(port)), &tls.Config{
-		ServerName: serverName,
+		ServerName: quicServerName(serverName),
 		NextProtos: []string{
 			"argotunnel",
-			"h3",
 		},
 		MinVersion: tls.VersionTLS13,
 	}, &quic.Config{
@@ -268,6 +267,14 @@ func probeQUIC(ctx context.Context, ip string, port int, serverName string, time
 	}
 	_ = conn.CloseWithError(0, "probe complete")
 	return float64(time.Since(t0).Microseconds()) / 1000.0, nil
+}
+
+func quicServerName(serverName string) string {
+	serverName = strings.TrimSpace(serverName)
+	if serverName == "" || strings.HasSuffix(serverName, ".v2.argotunnel.com") {
+		return config.CloudflaredQUICServerName
+	}
+	return serverName
 }
 
 func summarize(vals []float64) Result {

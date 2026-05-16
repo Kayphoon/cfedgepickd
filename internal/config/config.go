@@ -11,6 +11,8 @@ const (
 	ProtocolAuto  = "auto"
 	ProtocolQUIC  = "quic"
 	ProtocolHTTP2 = "http2"
+
+	CloudflaredQUICServerName = "quic.cftunnel.com"
 )
 
 var DefaultHostnames = []string{
@@ -109,7 +111,7 @@ func Default() Config {
 			ProbeTimeout:  "800ms",
 			Concurrency:   128,
 			MaxCandidates: 4096,
-			ServerName:    "region1.v2.argotunnel.com",
+			ServerName:    CloudflaredQUICServerName,
 		},
 		Switching: SwitchingConfig{
 			ProbeIntervalSeconds:  600,

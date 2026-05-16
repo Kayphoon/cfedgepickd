@@ -16,6 +16,10 @@ Supported in v1:
 - `auto`, `quic`, and `http2` protocol modes
 - QUIC probing first, with HTTP/2 TCP fallback in `auto`
 
+QUIC probing uses the same edge TLS server name as `cloudflared` itself:
+`quic.cftunnel.com`. The `region*.v2.argotunnel.com` names are the edge hostnames
+that `/etc/hosts` pins, not the QUIC TLS SNI.
+
 Not supported in v1:
 
 - OpenWrt / non-systemd service managers

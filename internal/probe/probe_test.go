@@ -17,3 +17,15 @@ func TestUniqueTop(t *testing.T) {
 		t.Fatalf("unexpected top: %+v", top)
 	}
 }
+
+func TestQUICServerNameUsesCloudflaredEdgeName(t *testing.T) {
+	if got := quicServerName(""); got != "quic.cftunnel.com" {
+		t.Fatalf("empty server name = %q", got)
+	}
+	if got := quicServerName("region1.v2.argotunnel.com"); got != "quic.cftunnel.com" {
+		t.Fatalf("legacy region server name = %q", got)
+	}
+	if got := quicServerName("custom.example.com"); got != "custom.example.com" {
+		t.Fatalf("custom server name = %q", got)
+	}
+}

@@ -33,7 +33,7 @@
     "probe_timeout": "800ms",
     "concurrency": 128,
     "max_candidates": 4096,
-    "server_name": "region1.v2.argotunnel.com"
+    "server_name": "quic.cftunnel.com"
   },
   "switching": {
     "probe_interval_seconds": 600,
@@ -56,4 +56,3 @@
     "dry_run": true
   }
 }
-
