@@ -310,7 +310,7 @@ func summarize(vals []float64) Result {
 
 func score(r Result) float64 {
 	if r.OK == 0 {
-		return math.Inf(1)
+		return 999999999
 	}
 	return r.MedianMS + r.StdevMS*0.35 + r.MaxMS*0.05 + float64(r.Fail)*1000
 }
