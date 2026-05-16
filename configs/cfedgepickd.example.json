@@ -52,6 +52,7 @@
     "hosts_file": "/etc/hosts",
     "backup_dir": "/var/backups/cfedgepickd",
     "state_file": "/var/lib/cfedgepickd/state.json",
+    "history_file": "/var/lib/cfedgepickd/history.jsonl",
     "log_level": "info",
     "dry_run": true
   }

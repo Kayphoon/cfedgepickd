@@ -7,9 +7,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/kayphoon/cfedgepickd/internal/config"
 	"github.com/kayphoon/cfedgepickd/internal/discover"
+	"github.com/kayphoon/cfedgepickd/internal/history"
 	"github.com/kayphoon/cfedgepickd/internal/install"
 	"github.com/kayphoon/cfedgepickd/internal/probe"
 )
@@ -26,6 +30,8 @@ func main() {
 		discoverCmd(os.Args[2:])
 	case "probe":
 		probeCmd(os.Args[2:])
+	case "graph":
+		graphCmd(os.Args[2:])
 	case "install":
 		installCmd(os.Args[2:])
 	case "version":
@@ -34,6 +40,37 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+}
+
+func graphCmd(args []string) {
+	fs := flag.NewFlagSet("graph", flag.ExitOnError)
+	configPath := fs.String("config", "/etc/cfedgepickd/config.json", "config file")
+	metric := fs.String("metric", "rtt", "rtt, ready, ha, concurrent, request_delta, error_delta, degraded, idle")
+	since := fs.String("since", "24h", "history window, for example 24h or 7d")
+	width := fs.Int("width", 80, "graph width")
+	height := fs.Int("height", 12, "graph height")
+	_ = fs.Parse(args)
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+	window, err := parseWindow(*since)
+	if err != nil {
+		log.Fatalf("invalid --since: %v", err)
+	}
+	records, err := history.ReadSince(cfg.Runtime.HistoryFile, time.Now().Add(-window))
+	if err != nil {
+		log.Fatalf("read history: %v", err)
+	}
+	points, summary, err := history.Series(records, *metric)
+	if err != nil {
+		log.Fatalf("series: %v", err)
+	}
+	out, err := history.RenderASCII(points, summary, *width, *height)
+	if err != nil {
+		log.Fatalf("graph: %v", err)
+	}
+	fmt.Print(out)
 }
 
 func discoverCmd(args []string) {
@@ -117,5 +154,19 @@ func printJSON(v any, pretty bool) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cfedgepickctl discover|probe|install|version [flags]\n")
+	fmt.Fprintf(os.Stderr, "usage: cfedgepickctl discover|probe|graph|install|version [flags]\n")
+}
+
+func parseWindow(raw string) (time.Duration, error) {
+	if raw == "" {
+		return 24 * time.Hour, nil
+	}
+	if strings.HasSuffix(raw, "d") {
+		days, err := strconv.Atoi(strings.TrimSuffix(raw, "d"))
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(raw)
 }

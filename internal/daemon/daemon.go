@@ -9,6 +9,7 @@ import (
 
 	"github.com/kayphoon/cfedgepickd/internal/cloudflared"
 	"github.com/kayphoon/cfedgepickd/internal/config"
+	"github.com/kayphoon/cfedgepickd/internal/history"
 	"github.com/kayphoon/cfedgepickd/internal/hosts"
 	"github.com/kayphoon/cfedgepickd/internal/probe"
 	"github.com/kayphoon/cfedgepickd/internal/state"
@@ -116,12 +117,43 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 		st.LastSwitchOK = err == nil
 		st.LastProtocol = appliedProtocol
 		if err != nil {
+			_ = appendHistory(cfg, decision, sw, err.Error())
 			_ = state.Save(cfg.Runtime.StateFile, st)
 			return decision, sw, err
 		}
 	}
+	_ = appendHistory(cfg, decision, sw, "")
 	_ = state.Save(cfg.Runtime.StateFile, st)
 	return decision, sw, nil
+}
+
+func appendHistory(cfg config.Config, decision Decision, sw *switcher.Result, switchErr string) error {
+	record := history.Record{
+		Time:               time.Now().UTC(),
+		ConfigProtocol:     cfg.Cloudflared.Protocol,
+		EffectiveProtocol:  decision.Protocol,
+		ReadyConnections:   decision.Ready.ReadyConnections,
+		HAConnections:      decision.Metrics.HAConnections,
+		ConcurrentRequests: decision.Metrics.ConcurrentRequests,
+		TotalRequests:      decision.Metrics.TotalRequests,
+		RequestErrors:      decision.Metrics.RequestErrors,
+		TopIPs:             decision.TopIPs,
+		CurrentIPs:         decision.CurrentIPs,
+		Idle:               decision.Idle,
+		DegradedRaw:        decision.DegradedRaw,
+		Degraded:           decision.Degraded,
+		ShouldSwitch:       decision.ShouldSwitch,
+		Reason:             decision.Reason,
+		SwitchError:        switchErr,
+	}
+	if len(decision.Probe.Top) > 0 {
+		record.TopIP = decision.Probe.Top[0].IP
+		record.TopMedianMS = decision.Probe.Top[0].MedianMS
+	}
+	if sw != nil {
+		record.SwitchApplied = sw.Applied
+	}
+	return history.Append(cfg.Runtime.HistoryFile, record)
 }
 
 func protocolForCloudflaredConfig(cfg config.Config, pr probe.Report) string {

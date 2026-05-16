@@ -83,11 +83,12 @@ type SwitchingConfig struct {
 }
 
 type RuntimeConfig struct {
-	HostsFile string `json:"hosts_file"`
-	BackupDir string `json:"backup_dir"`
-	StateFile string `json:"state_file"`
-	LogLevel  string `json:"log_level"`
-	DryRun    bool   `json:"dry_run"`
+	HostsFile   string `json:"hosts_file"`
+	BackupDir   string `json:"backup_dir"`
+	StateFile   string `json:"state_file"`
+	HistoryFile string `json:"history_file"`
+	LogLevel    string `json:"log_level"`
+	DryRun      bool   `json:"dry_run"`
 }
 
 func Default() Config {
@@ -127,11 +128,12 @@ func Default() Config {
 			ApplyProtocolToConfig: true,
 		},
 		Runtime: RuntimeConfig{
-			HostsFile: "/etc/hosts",
-			BackupDir: "/var/backups/cfedgepickd",
-			StateFile: "/var/lib/cfedgepickd/state.json",
-			LogLevel:  "info",
-			DryRun:    true,
+			HostsFile:   "/etc/hosts",
+			BackupDir:   "/var/backups/cfedgepickd",
+			StateFile:   "/var/lib/cfedgepickd/state.json",
+			HistoryFile: "/var/lib/cfedgepickd/history.jsonl",
+			LogLevel:    "info",
+			DryRun:      true,
 		},
 	}
 }
@@ -236,6 +238,9 @@ func (c Config) WithDefaults() Config {
 	}
 	if c.Runtime.StateFile == "" {
 		c.Runtime.StateFile = def.Runtime.StateFile
+	}
+	if c.Runtime.HistoryFile == "" {
+		c.Runtime.HistoryFile = def.Runtime.HistoryFile
 	}
 	if c.Runtime.LogLevel == "" {
 		c.Runtime.LogLevel = def.Runtime.LogLevel

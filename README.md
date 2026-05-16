@@ -40,6 +40,8 @@ Not supported in v1:
 cfedgepickctl discover
 cfedgepickctl probe --protocol auto
 cfedgepickctl install --dry-run --protocol auto
+cfedgepickctl graph --metric rtt --since 24h
+cfedgepickctl graph --metric error_delta --since 24h
 cfedgepickd once --config /etc/cfedgepickd/config.json
 cfedgepickd run --config /etc/cfedgepickd/config.json
 ```
@@ -47,6 +49,24 @@ cfedgepickd run --config /etc/cfedgepickd/config.json
 `install --dry-run` only prints discovered config, probe output, and the unit that
 would be installed. `install --apply` writes `/etc/cfedgepickd/config.json` and the
 systemd unit.
+
+## History And Graphs
+
+Each daemon cycle appends one JSONL record to
+`/var/lib/cfedgepickd/history.jsonl`. The file path is configurable through
+`runtime.history_file`.
+
+Use `cfedgepickctl graph` to draw terminal charts for recent windows:
+
+```bash
+cfedgepickctl graph --metric rtt --since 24h
+cfedgepickctl graph --metric request_delta --since 24h
+cfedgepickctl graph --metric error_delta --since 24h
+cfedgepickctl graph --metric ready --since 7d --width 100 --height 16
+```
+
+Supported metrics are `rtt`, `ready`, `ha`, `concurrent`, `requests`,
+`request_delta`, `errors`, `error_delta`, `degraded`, and `idle`.
 
 ## Build
 
