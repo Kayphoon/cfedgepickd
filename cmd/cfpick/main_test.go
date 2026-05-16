@@ -81,27 +81,32 @@ func TestRenderOverviewUsesTable(t *testing.T) {
 	}
 }
 
-func TestPerformanceSinceLast(t *testing.T) {
+func TestPerformanceFromHistory(t *testing.T) {
 	now := time.Unix(200, 0)
-	records := []history.Record{{
-		Time:                  now.Add(-10 * time.Second),
-		TotalRequests:         100,
-		RequestErrors:         1,
-		Response5xx:           3,
-		ProcessCPUSeconds:     10,
-		ProcessNetworkRxBytes: 1000,
-		ProcessNetworkTxBytes: 2000,
-	}}
-	metrics := cloudflared.Metrics{
-		TotalRequests:         120,
-		RequestErrors:         2,
-		Response5xx:           4,
-		ProcessCPUSeconds:     11,
-		ProcessNetworkRxBytes: 2000,
-		ProcessNetworkTxBytes: 5000,
+	records := []history.Record{
+		{
+			Time:                  now.Add(-10 * time.Second),
+			TotalRequests:         100,
+			RequestErrors:         1,
+			ResponseByCode:        map[string]float64{"500": 3},
+			Response5xx:           3,
+			ProcessCPUSeconds:     10,
+			ProcessNetworkRxBytes: 1000,
+			ProcessNetworkTxBytes: 2000,
+		},
+		{
+			Time:                  now,
+			TotalRequests:         120,
+			RequestErrors:         2,
+			ResponseByCode:        map[string]float64{"500": 4},
+			Response5xx:           4,
+			ProcessCPUSeconds:     11,
+			ProcessNetworkRxBytes: 2000,
+			ProcessNetworkTxBytes: 5000,
+		},
 	}
 
-	got := performanceSinceLast(metrics, records, now)
+	got := performanceFromHistory(records)
 	if !got.HasLast || got.RequestRate != 2 || got.ErrorRate != 0.1 || got.Response5xxDelta != 1 {
 		t.Fatalf("unexpected performance delta: %+v", got)
 	}

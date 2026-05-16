@@ -89,7 +89,7 @@ func statusCmd(args []string) {
 	fmt.Println()
 	fmt.Println(renderHealth(ready, readyErr, metrics, metricsErr))
 	fmt.Println()
-	fmt.Println(renderPerformance(metrics, metricsErr, records, time.Now()))
+	fmt.Println(renderPerformance(metrics, metricsErr, records))
 	fmt.Println()
 	fmt.Println(renderEdges(conns, edgesErr))
 
@@ -303,23 +303,23 @@ func renderHealth(ready cloudflared.Ready, readyErr error, metrics cloudflared.M
 	return renderTable("Health", []interface{}{"Signal", "State", "Detail"}, rows)
 }
 
-func renderPerformance(metrics cloudflared.Metrics, metricsErr error, records []history.Record, now time.Time) string {
+func renderPerformance(metrics cloudflared.Metrics, metricsErr error, records []history.Record) string {
 	if metricsErr != nil {
 		return renderTable("Performance", []interface{}{"Signal", "State", "Detail"}, []prettytable.Row{
 			{"Metrics", "UNKNOWN", metricsErr.Error()},
 		})
 	}
-	delta := performanceSinceLast(metrics, records, now)
+	delta := performanceFromHistory(records)
 	rows := []prettytable.Row{
 		{
 			"Requests",
 			activityLabel(delta.RequestRate),
-			fmt.Sprintf("%s, +%.0f since sample, total=%.0f", formatPerSecond(delta.RequestRate, "req"), delta.RequestDelta, metrics.TotalRequests),
+			fmt.Sprintf("%s, +%.0f last interval, total=%.0f", formatPerSecond(delta.RequestRate, "req"), delta.RequestDelta, metrics.TotalRequests),
 		},
 		{
 			"Errors",
 			statusLabel(delta.ErrorDelta == 0),
-			fmt.Sprintf("%s, +%.0f since sample, total=%.0f", formatPerSecond(delta.ErrorRate, "err"), delta.ErrorDelta, metrics.RequestErrors),
+			fmt.Sprintf("%s, +%.0f last interval, total=%.0f", formatPerSecond(delta.ErrorRate, "err"), delta.ErrorDelta, metrics.RequestErrors),
 		},
 		{
 			"HTTP Codes",
@@ -350,7 +350,7 @@ func renderPerformance(metrics cloudflared.Metrics, metricsErr error, records []
 	if delta.HasLast {
 		rows = append(rows, prettytable.Row{"Sample Gap", "INFO", delta.Elapsed.Round(time.Second).String()})
 	} else {
-		rows = append(rows, prettytable.Row{"Sample Gap", "INFO", "no previous history sample"})
+		rows = append(rows, prettytable.Row{"Sample Gap", "INFO", "need two history samples for rates"})
 	}
 	return renderTable("Performance", []interface{}{"Signal", "State", "Detail"}, rows)
 }
@@ -547,40 +547,43 @@ type performanceDelta struct {
 	NetworkTxRate     float64
 }
 
-func performanceSinceLast(metrics cloudflared.Metrics, records []history.Record, now time.Time) performanceDelta {
+func performanceFromHistory(records []history.Record) performanceDelta {
 	d := performanceDelta{}
-	if metrics.ProxyConnectLatencyHits > 0 {
-		d.ProxyConnectAvgMS = metrics.ProxyConnectLatencySum / metrics.ProxyConnectLatencyHits
-	}
-	if len(records) == 0 {
+	if len(records) < 2 {
+		if len(records) == 1 && records[0].ProxyConnectLatencyHits > 0 {
+			d.ProxyConnectAvgMS = records[0].ProxyConnectLatencySum / records[0].ProxyConnectLatencyHits
+		}
 		return d
 	}
 	last := records[len(records)-1]
-	elapsed := now.Sub(last.Time)
+	prev := records[len(records)-2]
+	elapsed := last.Time.Sub(prev.Time)
 	if elapsed <= 0 {
 		return d
 	}
 	seconds := elapsed.Seconds()
 	d.HasLast = true
 	d.Elapsed = elapsed
-	d.RequestDelta = nonNegativeDelta(metrics.TotalRequests, last.TotalRequests)
+	d.RequestDelta = nonNegativeDelta(last.TotalRequests, prev.TotalRequests)
 	d.RequestRate = d.RequestDelta / seconds
-	d.ErrorDelta = nonNegativeDelta(metrics.RequestErrors, last.RequestErrors)
+	d.ErrorDelta = nonNegativeDelta(last.RequestErrors, prev.RequestErrors)
 	d.ErrorRate = d.ErrorDelta / seconds
-	if last.ResponseByCode != nil || last.Response2xx != 0 || last.Response3xx != 0 || last.Response4xx != 0 || last.Response5xx != 0 {
-		d.Response5xxDelta = nonNegativeDelta(metrics.Response5xx, last.Response5xx)
+	if prev.ResponseByCode != nil || prev.Response2xx != 0 || prev.Response3xx != 0 || prev.Response4xx != 0 || prev.Response5xx != 0 {
+		d.Response5xxDelta = nonNegativeDelta(last.Response5xx, prev.Response5xx)
 	}
-	if metrics.ProxyConnectLatencyHits > last.ProxyConnectLatencyHits {
-		d.ProxyConnectAvgMS = nonNegativeDelta(metrics.ProxyConnectLatencySum, last.ProxyConnectLatencySum) / nonNegativeDelta(metrics.ProxyConnectLatencyHits, last.ProxyConnectLatencyHits)
+	if last.ProxyConnectLatencyHits > prev.ProxyConnectLatencyHits {
+		d.ProxyConnectAvgMS = nonNegativeDelta(last.ProxyConnectLatencySum, prev.ProxyConnectLatencySum) / nonNegativeDelta(last.ProxyConnectLatencyHits, prev.ProxyConnectLatencyHits)
+	} else if last.ProxyConnectLatencyHits > 0 {
+		d.ProxyConnectAvgMS = last.ProxyConnectLatencySum / last.ProxyConnectLatencyHits
 	}
-	if last.ProcessCPUSeconds > 0 {
-		d.CPUPercent = 100 * nonNegativeDelta(metrics.ProcessCPUSeconds, last.ProcessCPUSeconds) / seconds
+	if prev.ProcessCPUSeconds > 0 {
+		d.CPUPercent = 100 * nonNegativeDelta(last.ProcessCPUSeconds, prev.ProcessCPUSeconds) / seconds
 	}
-	if last.ProcessNetworkRxBytes > 0 {
-		d.NetworkRxRate = nonNegativeDelta(metrics.ProcessNetworkRxBytes, last.ProcessNetworkRxBytes) / seconds
+	if prev.ProcessNetworkRxBytes > 0 {
+		d.NetworkRxRate = nonNegativeDelta(last.ProcessNetworkRxBytes, prev.ProcessNetworkRxBytes) / seconds
 	}
-	if last.ProcessNetworkTxBytes > 0 {
-		d.NetworkTxRate = nonNegativeDelta(metrics.ProcessNetworkTxBytes, last.ProcessNetworkTxBytes) / seconds
+	if prev.ProcessNetworkTxBytes > 0 {
+		d.NetworkTxRate = nonNegativeDelta(last.ProcessNetworkTxBytes, prev.ProcessNetworkTxBytes) / seconds
 	}
 	return d
 }
