@@ -91,6 +91,79 @@ func Append(path string, r Record) error {
 	return err
 }
 
+func PruneBefore(path string, cutoff time.Time) (int, error) {
+	if path == "" || cutoff.IsZero() {
+		return 0, nil
+	}
+	in, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	defer in.Close()
+
+	info, err := in.Stat()
+	if err != nil {
+		return 0, err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".history-prune-*")
+	if err != nil {
+		return 0, err
+	}
+	tmpName := tmp.Name()
+	keepTmp := false
+	defer func() {
+		if !keepTmp {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	writer := bufio.NewWriter(tmp)
+	removed := 0
+	sc := bufio.NewScanner(in)
+	for sc.Scan() {
+		raw := sc.Text()
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		var r Record
+		if err := json.Unmarshal([]byte(line), &r); err == nil && !r.Time.IsZero() && r.Time.Before(cutoff) {
+			removed++
+			continue
+		}
+		if _, err := writer.WriteString(raw + "\n"); err != nil {
+			_ = tmp.Close()
+			return 0, err
+		}
+	}
+	if err := sc.Err(); err != nil {
+		_ = tmp.Close()
+		return 0, err
+	}
+	if err := writer.Flush(); err != nil {
+		_ = tmp.Close()
+		return 0, err
+	}
+	if err := tmp.Chmod(info.Mode()); err != nil {
+		_ = tmp.Close()
+		return 0, err
+	}
+	if err := tmp.Close(); err != nil {
+		return 0, err
+	}
+	if removed == 0 {
+		return 0, nil
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return 0, err
+	}
+	keepTmp = true
+	return removed, nil
+}
+
 func ReadSince(path string, since time.Time) ([]Record, error) {
 	f, err := os.Open(path)
 	if err != nil {

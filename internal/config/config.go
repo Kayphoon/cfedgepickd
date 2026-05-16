@@ -88,12 +88,13 @@ type SwitchingConfig struct {
 }
 
 type RuntimeConfig struct {
-	HostsFile   string `json:"hosts_file"`
-	BackupDir   string `json:"backup_dir"`
-	StateFile   string `json:"state_file"`
-	HistoryFile string `json:"history_file"`
-	LogLevel    string `json:"log_level"`
-	DryRun      bool   `json:"dry_run"`
+	HostsFile            string `json:"hosts_file"`
+	BackupDir            string `json:"backup_dir"`
+	StateFile            string `json:"state_file"`
+	HistoryFile          string `json:"history_file"`
+	HistoryRetentionDays int    `json:"history_retention_days"`
+	LogLevel             string `json:"log_level"`
+	DryRun               bool   `json:"dry_run"`
 }
 
 func Default() Config {
@@ -120,7 +121,7 @@ func Default() Config {
 			ServerName:    CloudflaredQUICServerName,
 		},
 		Switching: SwitchingConfig{
-			ProbeIntervalSeconds:  600,
+			ProbeIntervalSeconds:  300,
 			MetricsPollSeconds:    5,
 			IdleWindowSeconds:     180,
 			CooldownSeconds:       3600,
@@ -133,12 +134,13 @@ func Default() Config {
 			ApplyProtocolToConfig: true,
 		},
 		Runtime: RuntimeConfig{
-			HostsFile:   "/etc/hosts",
-			BackupDir:   "/var/backups/cfpick",
-			StateFile:   "/var/lib/cfpick/state.json",
-			HistoryFile: "/var/lib/cfpick/history.jsonl",
-			LogLevel:    "info",
-			DryRun:      true,
+			HostsFile:            "/etc/hosts",
+			BackupDir:            "/var/backups/cfpick",
+			StateFile:            "/var/lib/cfpick/state.json",
+			HistoryFile:          "/var/lib/cfpick/history.jsonl",
+			HistoryRetentionDays: 30,
+			LogLevel:             "info",
+			DryRun:               true,
 		},
 	}
 }
@@ -246,6 +248,9 @@ func (c Config) WithDefaults() Config {
 	}
 	if c.Runtime.HistoryFile == "" {
 		c.Runtime.HistoryFile = def.Runtime.HistoryFile
+	}
+	if c.Runtime.HistoryRetentionDays == 0 {
+		c.Runtime.HistoryRetentionDays = def.Runtime.HistoryRetentionDays
 	}
 	if c.Runtime.LogLevel == "" {
 		c.Runtime.LogLevel = def.Runtime.LogLevel

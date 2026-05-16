@@ -40,7 +40,7 @@
     "server_name": "quic.cftunnel.com"
   },
   "switching": {
-    "probe_interval_seconds": 600,
+    "probe_interval_seconds": 300,
     "metrics_poll_seconds": 5,
     "idle_window_seconds": 180,
     "cooldown_seconds": 3600,
@@ -57,6 +57,7 @@
     "backup_dir": "/var/backups/cfpick",
     "state_file": "/var/lib/cfpick/state.json",
     "history_file": "/var/lib/cfpick/history.jsonl",
+    "history_retention_days": 30,
     "log_level": "info",
     "dry_run": true
   }

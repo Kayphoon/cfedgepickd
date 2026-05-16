@@ -171,7 +171,15 @@ func appendHistory(cfg config.Config, decision Decision, sw *switcher.Result, sw
 	if sw != nil {
 		record.SwitchApplied = sw.Applied
 	}
-	return history.Append(cfg.Runtime.HistoryFile, record)
+	if err := history.Append(cfg.Runtime.HistoryFile, record); err != nil {
+		return err
+	}
+	if cfg.Runtime.HistoryRetentionDays > 0 {
+		cutoff := record.Time.Add(-time.Duration(cfg.Runtime.HistoryRetentionDays) * 24 * time.Hour)
+		_, err := history.PruneBefore(cfg.Runtime.HistoryFile, cutoff)
+		return err
+	}
+	return nil
 }
 
 func protocolForCloudflaredConfig(cfg config.Config, pr probe.Report) string {
@@ -191,7 +199,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	cfg = cfg.WithDefaults()
 	interval := time.Duration(cfg.Switching.ProbeIntervalSeconds) * time.Second
 	if interval <= 0 {
-		interval = 10 * time.Minute
+		interval = 5 * time.Minute
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

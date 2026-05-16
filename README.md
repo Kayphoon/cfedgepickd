@@ -54,7 +54,13 @@ would be installed. `install --apply` writes `/etc/cfpick/config.json` and the
 ## History And Graphs
 
 Each daemon cycle appends one JSONL record to `/var/lib/cfpick/history.jsonl`.
-The file path is configurable through `runtime.history_file`.
+By default the daemon samples every 5 minutes, controlled by
+`switching.probe_interval_seconds`. The file path is configurable through
+`runtime.history_file`.
+
+History retention defaults to 30 days through `runtime.history_retention_days`.
+Records older than that are pruned after each successful append. Set the value to
+a negative number to disable pruning.
 
 Use `cfpick status` to show a terminal dashboard. It renders current health,
 cloudflared performance, active edge sockets, the latest sample, and a time-ordered

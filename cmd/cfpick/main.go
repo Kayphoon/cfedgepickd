@@ -289,12 +289,18 @@ func edgeRemotes(conns []cloudflared.EdgeConnection) []string {
 }
 
 func renderOverview(configPath string, cfg config.Config, historyPath, metric, since string) string {
+	retention := "disabled"
+	if cfg.Runtime.HistoryRetentionDays > 0 {
+		retention = fmt.Sprintf("%dd", cfg.Runtime.HistoryRetentionDays)
+	}
 	return renderKVTable("Overview", []prettytable.Row{
 		{"Config", configPath},
 		{"Protocol", cfg.Cloudflared.Protocol},
 		{"Metrics", cfg.Cloudflared.MetricsURL},
 		{"Ready", cfg.Cloudflared.ReadyURL},
 		{"History", historyPath},
+		{"Sample Interval", (time.Duration(cfg.Switching.ProbeIntervalSeconds) * time.Second).String()},
+		{"History Retention", retention},
 		{"Window", since},
 		{"Metric", metric},
 	})

@@ -1,6 +1,8 @@
 package history
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -112,5 +114,54 @@ func TestRenderASCII(t *testing.T) {
 	}
 	if !strings.Contains(out, "metric=rtt") || !strings.Contains(out, "*") {
 		t.Fatalf("unexpected graph output:\n%s", out)
+	}
+}
+
+func TestPruneBeforeRemovesOldRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	now := time.Unix(1_000, 0).UTC()
+	if err := Append(path, Record{Time: now.Add(-48 * time.Hour), TotalRequests: 1}); err != nil {
+		t.Fatalf("append old record: %v", err)
+	}
+	if err := Append(path, Record{Time: now.Add(-time.Hour), TotalRequests: 2}); err != nil {
+		t.Fatalf("append recent record: %v", err)
+	}
+
+	removed, err := PruneBefore(path, now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("PruneBefore returned error: %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("removed=%d, want 1", removed)
+	}
+
+	records, err := ReadSince(path, time.Time{})
+	if err != nil {
+		t.Fatalf("ReadSince returned error: %v", err)
+	}
+	if len(records) != 1 || records[0].TotalRequests != 2 {
+		t.Fatalf("records=%+v", records)
+	}
+}
+
+func TestPruneBeforeKeepsInvalidLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.jsonl")
+	if err := os.WriteFile(path, []byte("not-json\n"), 0644); err != nil {
+		t.Fatalf("write history: %v", err)
+	}
+
+	removed, err := PruneBefore(path, time.Unix(1_000, 0))
+	if err != nil {
+		t.Fatalf("PruneBefore returned error: %v", err)
+	}
+	if removed != 0 {
+		t.Fatalf("removed=%d, want 0", removed)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read history: %v", err)
+	}
+	if string(data) != "not-json\n" {
+		t.Fatalf("unexpected file content %q", string(data))
 	}
 }
