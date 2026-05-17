@@ -7,7 +7,9 @@ import (
 
 	prettytable "github.com/jedib0t/go-pretty/v6/table"
 	"github.com/kayphoon/cfpick/internal/cloudflared"
+	"github.com/kayphoon/cfpick/internal/config"
 	"github.com/kayphoon/cfpick/internal/history"
+	"github.com/kayphoon/cfpick/internal/slots"
 )
 
 func TestParseWindow(t *testing.T) {
@@ -158,6 +160,29 @@ func TestRenderOverviewUsesTable(t *testing.T) {
 	out := renderKVTable("Test", []prettytable.Row{{"A", "B"}})
 	if !strings.Contains(out, "Test") || !strings.Contains(out, "FIELD") {
 		t.Fatalf("unexpected table:\n%s", out)
+	}
+}
+
+func TestRenderSlotsUsesResolvedActiveEndpoint(t *testing.T) {
+	st := slots.DefaultState(config.Default())
+	st.SetActive(slots.Blue)
+	endpoint := slots.ActiveEndpoint{
+		Slot:       st.Green,
+		State:      st,
+		MetricsURL: st.Green.MetricsURL,
+		ReadyURL:   st.Green.ReadyURL,
+		Source:     "slots.green",
+	}
+
+	out := renderSlots(endpoint)
+	if !strings.Contains(out, "Active") || !strings.Contains(out, "green") || !strings.Contains(out, "slots.green") {
+		t.Fatalf("active row missing resolved green endpoint:\n%s", out)
+	}
+	if !strings.Contains(out, "Green  | ACTIVE") {
+		t.Fatalf("green row should use resolved endpoint state, not stale slots.active:\n%s", out)
+	}
+	if !strings.Contains(out, "Blue   | STANDBY") {
+		t.Fatalf("blue row should not remain active when fallback resolved green:\n%s", out)
 	}
 }
 

@@ -424,8 +424,8 @@ func renderSlots(endpoint slots.ActiveEndpoint) string {
 	active := endpoint.Slot
 	rows := []prettytable.Row{
 		{"Active", emptyDash(active.Name), emptyDash(active.Service), emptyDash(endpoint.MetricsURL), emptyDash(endpoint.Source)},
-		{"Green", slotStateLabel(st.Active == slots.Green), emptyDash(st.Green.Service), emptyDash(st.Green.MetricsURL), emptyDash(st.LastResult)},
-		{"Blue", slotStateLabel(st.Active == slots.Blue), emptyDash(st.Blue.Service), emptyDash(st.Blue.MetricsURL), emptyDash(st.LastMessage)},
+		{"Green", slotStateLabel(active.Name == slots.Green), emptyDash(st.Green.Service), emptyDash(st.Green.MetricsURL), emptyDash(st.LastResult)},
+		{"Blue", slotStateLabel(active.Name == slots.Blue), emptyDash(st.Blue.Service), emptyDash(st.Blue.MetricsURL), emptyDash(st.LastMessage)},
 	}
 	return renderTable("Slots", []interface{}{"Slot", "State", "Service", "Metrics", "Detail"}, rows)
 }

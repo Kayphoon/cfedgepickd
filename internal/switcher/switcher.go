@@ -162,6 +162,9 @@ func ApplyHot(ctx context.Context, cfg config.Config, ips []string, protocol str
 		st.Blue.MetricsURL = "http://" + addr + "/metrics"
 		st.Blue.ReadyURL = "http://" + addr + "/ready"
 	}
+	if oldActive, changed := reconcileActiveFromService(ctx, mgr, &st); changed {
+		warnings = append(warnings, fmt.Sprintf("active slot reconciled from %s to %s using service status", oldActive, st.Active))
+	}
 	active := st.ActiveSlot()
 	inactive := st.InactiveSlot()
 	res := Result{
@@ -247,6 +250,21 @@ func ApplyHot(ctx context.Context, cfg config.Config, ips []string, protocol str
 	res.Applied = true
 	res.Message = "hot switch applied"
 	return res, nil
+}
+
+func reconcileActiveFromService(ctx context.Context, mgr service.Manager, st *slots.State) (string, bool) {
+	oldActive := st.Active
+	greenStatus, greenErr := mgr.Status(ctx, st.Green)
+	blueStatus, blueErr := mgr.Status(ctx, st.Blue)
+	greenActive := greenErr == nil && greenStatus.Active
+	blueActive := blueErr == nil && blueStatus.Active
+	switch {
+	case greenActive && !blueActive:
+		st.SetActive(slots.Green)
+	case blueActive && !greenActive:
+		st.SetActive(slots.Blue)
+	}
+	return oldActive, oldActive != st.Active
 }
 
 func mergeSlot(base, discovered slots.Slot) slots.Slot {
