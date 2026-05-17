@@ -58,7 +58,7 @@ curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | s
 Pin a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.8
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.9
 ```
 
 The installer detects `linux/amd64` and `linux/arm64`, downloads the matching
@@ -117,7 +117,7 @@ Supported metrics include `request_rate`, `request_delta`, `error_rate`,
 
 ```bash
 make test
-make dist VERSION=v0.2.8
+make dist VERSION=v0.2.9
 ```
 
 `make dist` builds static Linux binaries for `linux/amd64` and `linux/arm64`:
@@ -140,8 +140,8 @@ creates a GitHub Release and uploads the two Linux archives, `checksums.txt`,
 and `install.sh`:
 
 ```bash
-git tag v0.2.8
-git push origin v0.2.8
+git tag v0.2.9
+git push origin v0.2.9
 ```
 
 Tag builds embed the tag name in `cfpick version`, `cfedgepickd version`, and

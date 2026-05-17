@@ -8,10 +8,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kayphoon/cfpick/internal/config"
 	"github.com/kayphoon/cfpick/internal/discover"
 	"github.com/kayphoon/cfpick/internal/probe"
+)
+
+const (
+	installProbeMaxCandidates = 256
+	installProbeRounds        = 2
+	installProbeTimeout       = "400ms"
+	installProbeConcurrency   = 128
 )
 
 type Options struct {
@@ -43,10 +51,11 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if err := cfg.Validate(); err != nil {
 		return Report{Discover: dr, Config: cfg}, err
 	}
-	pr, err := probe.Run(ctx, cfg, probe.Mode(cfg.Cloudflared.Protocol))
+	pr, err := probe.Run(ctx, probeConfigForInstall(cfg), probe.Mode(cfg.Cloudflared.Protocol))
 	cfg.Runtime.DryRun = true
 	unit := RenderUnit(opts.Binary, opts.Config, cfg.Cloudflared.Service)
 	rep := Report{Discover: dr, Probe: pr, Config: cfg, Unit: unit}
+	rep.Notes = append(rep.Notes, "installer probe uses a fast sample; daemon keeps full configured probe settings")
 	if !opts.Apply {
 		rep.Notes = append(rep.Notes, "dry-run only; no files written")
 		return rep, err
@@ -77,6 +86,36 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	rep.Unit = RenderUnit(opts.Binary, configPath, cfg.Cloudflared.Service)
 	rep.Notes = append(rep.Notes, "wrote "+configPath, "wrote "+unitPath)
 	return rep, err
+}
+
+func probeConfigForInstall(cfg config.Config) config.Config {
+	cfg.Edge.MaxCandidates = capPositive(cfg.Edge.MaxCandidates, installProbeMaxCandidates)
+	cfg.Edge.ProbeRounds = capPositive(cfg.Edge.ProbeRounds, installProbeRounds)
+	cfg.Edge.Concurrency = capPositive(cfg.Edge.Concurrency, installProbeConcurrency)
+	cfg.Edge.ProbeTimeout = capDuration(cfg.Edge.ProbeTimeout, installProbeTimeout)
+	return cfg
+}
+
+func capPositive(v, max int) int {
+	if v <= 0 || v > max {
+		return max
+	}
+	return v
+}
+
+func capDuration(v, max string) string {
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return max
+	}
+	limit, err := time.ParseDuration(max)
+	if err != nil {
+		return v
+	}
+	if d <= 0 || d > limit {
+		return max
+	}
+	return v
 }
 
 func RenderUnit(binary, configPath, cloudflaredService string) string {

@@ -17,7 +17,7 @@ Usage:
   install.sh [--dry-run|--apply] [--protocol auto|quic|http2] [options]
 
 Options:
-  --version VERSION   Release tag to install, for example v0.2.8. Default: latest
+  --version VERSION   Release tag to install, for example v0.2.9. Default: latest
   --repo OWNER/REPO   GitHub repository. Default: Kayphoon/cfpick
   --prefix PATH       Binary install directory. Default: /usr/local/bin
   --config PATH       Config path. Default: /etc/cfpick/config.json
@@ -29,7 +29,7 @@ Options:
 Examples:
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sh -s -- --dry-run
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.8 --start
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.9 --start
 USAGE
 }
 
