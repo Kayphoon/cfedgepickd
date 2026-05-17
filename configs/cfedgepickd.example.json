@@ -50,6 +50,7 @@
     "min_improvement_ratio": 0.35,
     "degraded_factor": 3,
     "degraded_rounds": 3,
+    "emergency_rtt_threshold_ms": 0,
     "allow_emergency_switch": true,
     "require_idle_for_planned": true,
     "apply_protocol_to_config": true

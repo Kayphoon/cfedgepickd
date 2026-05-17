@@ -24,11 +24,12 @@ const (
 )
 
 type Options struct {
-	Apply    bool
-	Protocol string
-	Config   string
-	Binary   string
-	UnitPath string
+	Apply                   bool
+	Protocol                string
+	Config                  string
+	Binary                  string
+	UnitPath                string
+	EmergencyRTTThresholdMS float64
 }
 
 type Report struct {
@@ -48,6 +49,9 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	cfg := dr.Config.WithDefaults()
 	if opts.Protocol != "" {
 		cfg.Cloudflared.Protocol = opts.Protocol
+	}
+	if opts.EmergencyRTTThresholdMS != 0 {
+		cfg.Switching.EmergencyRTTThresholdMS = opts.EmergencyRTTThresholdMS
 	}
 	if err := cfg.Validate(); err != nil {
 		return Report{Discover: dr, Config: cfg}, err

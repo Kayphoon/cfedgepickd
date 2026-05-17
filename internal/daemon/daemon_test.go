@@ -75,6 +75,25 @@ func TestCurrentProbeSamplesPreserveCurrentOrder(t *testing.T) {
 	}
 }
 
+func TestCurrentRTTAboveThresholdDetectsWorstCurrentIP(t *testing.T) {
+	ip, rtt, ok := currentRTTAboveThreshold([]string{"198.41.2.1", "198.41.2.2"}, []probe.Result{
+		{IP: "198.41.2.1", MedianMS: 80, OK: 8},
+		{IP: "198.41.2.2", MedianMS: 120, OK: 8},
+	}, 100)
+	if !ok || ip != "198.41.2.2" || rtt != 120 {
+		t.Fatalf("unexpected threshold result: ip=%q rtt=%f ok=%v", ip, rtt, ok)
+	}
+}
+
+func TestCurrentRTTAboveThresholdDisabledAtZero(t *testing.T) {
+	_, _, ok := currentRTTAboveThreshold([]string{"198.41.2.1"}, []probe.Result{
+		{IP: "198.41.2.1", MedianMS: 120, OK: 8},
+	}, 0)
+	if ok {
+		t.Fatal("zero threshold should disable emergency RTT detection")
+	}
+}
+
 func TestManualProbeReportUsesProvidedIPs(t *testing.T) {
 	rep := manualProbeReport([]string{"198.41.1.1", "198.41.1.2"}, config.ProtocolAuto)
 	if rep.EffectiveProtocol != config.ProtocolAuto || rep.Candidates != 2 {

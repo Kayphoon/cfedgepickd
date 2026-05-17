@@ -5,6 +5,7 @@ repo="Kayphoon/cfpick"
 version="latest"
 mode="dry-run"
 protocol="auto"
+emergency_rtt_ms="0"
 prefix="/usr/local/bin"
 config="/etc/cfpick/config.json"
 unit="/etc/systemd/system/cfpick.service"
@@ -19,6 +20,8 @@ Usage:
 Options:
   --version VERSION   Release tag to install, for example v0.2.13. Default: latest
   --repo OWNER/REPO   GitHub repository. Default: Kayphoon/cfpick
+  --emergency-rtt-ms MS
+                     Immediate hot-switch threshold in ms. 0 disables. Default: 0
   --prefix PATH       Binary install directory. Default: /usr/local/bin
   --config PATH       Config path. Default: /etc/cfpick/config.json
   --unit PATH         systemd unit or launchd plist path. Default: platform-specific
@@ -38,6 +41,7 @@ while [ "$#" -gt 0 ]; do
     --dry-run) mode="dry-run" ;;
     --apply) mode="apply" ;;
     --protocol) protocol="$2"; shift ;;
+    --emergency-rtt-ms) emergency_rtt_ms="$2"; shift ;;
     --repo) repo="$2"; shift ;;
     --version) version="$2"; shift ;;
     --prefix) prefix="$2"; shift ;;
@@ -108,7 +112,7 @@ install_from_dir() {
   fi
 
   if [ "$mode" = "dry-run" ]; then
-    "$package_dir/cfpick" install --protocol "$protocol" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
+    "$package_dir/cfpick" install --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
     exit 0
   fi
 
@@ -125,7 +129,7 @@ install_from_dir() {
     install -m 0755 "$package_dir/cfedgepickctl" "$prefix/cfedgepickctl"
   fi
 
-  "$prefix/cfpick" install --apply --protocol "$protocol" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
+  "$prefix/cfpick" install --apply --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
 
   if [ "$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
     unit_name="$(basename "$unit")"

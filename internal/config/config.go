@@ -77,23 +77,24 @@ type EdgeConfig struct {
 }
 
 type SwitchingConfig struct {
-	ProbeIntervalSeconds   int     `json:"probe_interval_seconds"`
-	MetricsPollSeconds     int     `json:"metrics_poll_seconds"`
-	IdleWindowSeconds      int     `json:"idle_window_seconds"`
-	CooldownSeconds        int     `json:"cooldown_seconds"`
-	RestartTimeoutSeconds  int     `json:"restart_timeout_seconds"`
-	Strategy               string  `json:"strategy"`
-	HotMetricsHost         string  `json:"hot_metrics_host"`
-	HotMetricsPortStart    int     `json:"hot_metrics_port_start"`
-	HotMetricsPortEnd      int     `json:"hot_metrics_port_end"`
-	HotStartTimeoutSeconds int     `json:"hot_start_timeout_seconds"`
-	HotDrainTimeoutSeconds int     `json:"hot_drain_timeout_seconds"`
-	MinImprovementRatio    float64 `json:"min_improvement_ratio"`
-	DegradedFactor         float64 `json:"degraded_factor"`
-	DegradedRounds         int     `json:"degraded_rounds"`
-	AllowEmergencySwitch   bool    `json:"allow_emergency_switch"`
-	RequireIdleForPlanned  bool    `json:"require_idle_for_planned"`
-	ApplyProtocolToConfig  bool    `json:"apply_protocol_to_config"`
+	ProbeIntervalSeconds    int     `json:"probe_interval_seconds"`
+	MetricsPollSeconds      int     `json:"metrics_poll_seconds"`
+	IdleWindowSeconds       int     `json:"idle_window_seconds"`
+	CooldownSeconds         int     `json:"cooldown_seconds"`
+	RestartTimeoutSeconds   int     `json:"restart_timeout_seconds"`
+	Strategy                string  `json:"strategy"`
+	HotMetricsHost          string  `json:"hot_metrics_host"`
+	HotMetricsPortStart     int     `json:"hot_metrics_port_start"`
+	HotMetricsPortEnd       int     `json:"hot_metrics_port_end"`
+	HotStartTimeoutSeconds  int     `json:"hot_start_timeout_seconds"`
+	HotDrainTimeoutSeconds  int     `json:"hot_drain_timeout_seconds"`
+	MinImprovementRatio     float64 `json:"min_improvement_ratio"`
+	DegradedFactor          float64 `json:"degraded_factor"`
+	DegradedRounds          int     `json:"degraded_rounds"`
+	EmergencyRTTThresholdMS float64 `json:"emergency_rtt_threshold_ms"`
+	AllowEmergencySwitch    bool    `json:"allow_emergency_switch"`
+	RequireIdleForPlanned   bool    `json:"require_idle_for_planned"`
+	ApplyProtocolToConfig   bool    `json:"apply_protocol_to_config"`
 }
 
 type RuntimeConfig struct {
@@ -153,23 +154,24 @@ func Default() Config {
 			ServerName:    CloudflaredQUICServerName,
 		},
 		Switching: SwitchingConfig{
-			ProbeIntervalSeconds:   300,
-			MetricsPollSeconds:     5,
-			IdleWindowSeconds:      180,
-			CooldownSeconds:        3600,
-			RestartTimeoutSeconds:  30,
-			Strategy:               SwitchStrategyHot,
-			HotMetricsHost:         "127.0.0.1",
-			HotMetricsPortStart:    20241,
-			HotMetricsPortEnd:      20259,
-			HotStartTimeoutSeconds: 30,
-			HotDrainTimeoutSeconds: 45,
-			MinImprovementRatio:    0.35,
-			DegradedFactor:         3.0,
-			DegradedRounds:         3,
-			AllowEmergencySwitch:   true,
-			RequireIdleForPlanned:  true,
-			ApplyProtocolToConfig:  true,
+			ProbeIntervalSeconds:    300,
+			MetricsPollSeconds:      5,
+			IdleWindowSeconds:       180,
+			CooldownSeconds:         3600,
+			RestartTimeoutSeconds:   30,
+			Strategy:                SwitchStrategyHot,
+			HotMetricsHost:          "127.0.0.1",
+			HotMetricsPortStart:     20241,
+			HotMetricsPortEnd:       20259,
+			HotStartTimeoutSeconds:  30,
+			HotDrainTimeoutSeconds:  45,
+			MinImprovementRatio:     0.35,
+			DegradedFactor:          3.0,
+			DegradedRounds:          3,
+			EmergencyRTTThresholdMS: 0,
+			AllowEmergencySwitch:    true,
+			RequireIdleForPlanned:   true,
+			ApplyProtocolToConfig:   true,
 		},
 		Runtime: RuntimeConfig{
 			HostsFile:            "/etc/hosts",
@@ -346,6 +348,9 @@ func (c Config) Validate() error {
 	}
 	if c.Switching.HotMetricsPortEnd < c.Switching.HotMetricsPortStart {
 		return errors.New("switching.hot_metrics_port_end must be >= hot_metrics_port_start")
+	}
+	if c.Switching.EmergencyRTTThresholdMS < 0 {
+		return errors.New("switching.emergency_rtt_threshold_ms must be >= 0")
 	}
 	return nil
 }

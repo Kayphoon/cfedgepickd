@@ -77,11 +77,15 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 	if !rawDegraded && len(currentIPs) > 0 {
 		rawDegraded = currentWorseThanTop(currentIPs, pr.Results, cfg)
 	}
+	emergencyIP, emergencyRTT, emergencyRTTExceeded := currentRTTAboveThreshold(currentIPs, pr.Results, cfg.Switching.EmergencyRTTThresholdMS)
+	if emergencyRTTExceeded {
+		rawDegraded = true
+	}
 	degradedRun := 0
 	if rawDegraded {
 		degradedRun = st.DegradedStreak + 1
 	}
-	emergency := ready.ReadyConnections < 2
+	emergency := ready.ReadyConnections < 2 || emergencyRTTExceeded
 	degraded := emergency || degradedRun >= cfg.Switching.DegradedRounds
 	cooldown := state.InCooldown(st, cfg.Switching.CooldownSeconds, now)
 	changed := differentSet(currentIPs, topIPs)
@@ -98,6 +102,8 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 		reason = "current connections are not degraded"
 	} else if cooldown {
 		reason = "switch cooldown is active"
+	} else if emergencyRTTExceeded && cfg.Switching.AllowEmergencySwitch {
+		reason = fmt.Sprintf("emergency RTT threshold exceeded: %s %.2fms > %.2fms", emergencyIP, emergencyRTT, cfg.Switching.EmergencyRTTThresholdMS)
 	} else if !idle && cfg.Switching.RequireIdleForPlanned {
 		reason = "waiting for idle window"
 	} else if should {
@@ -498,6 +504,29 @@ func currentWorseThanTop(current []string, results []probe.Result, cfg config.Co
 		}
 	}
 	return false
+}
+
+func currentRTTAboveThreshold(current []string, results []probe.Result, thresholdMS float64) (string, float64, bool) {
+	if thresholdMS <= 0 || len(current) == 0 || len(results) == 0 {
+		return "", 0, false
+	}
+	byIP := map[string]probe.Result{}
+	for _, r := range results {
+		byIP[r.IP] = r
+	}
+	var worstIP string
+	var worstRTT float64
+	for _, ip := range current {
+		r, found := byIP[ip]
+		if !found || r.MedianMS <= thresholdMS {
+			continue
+		}
+		if r.MedianMS > worstRTT {
+			worstIP = ip
+			worstRTT = r.MedianMS
+		}
+	}
+	return worstIP, worstRTT, worstIP != ""
 }
 
 func differentSet(a, b []string) bool {

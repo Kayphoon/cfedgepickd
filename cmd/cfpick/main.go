@@ -321,15 +321,17 @@ func installCmd(args []string) {
 	configPath := fs.String("config", config.DefaultConfigPath, "target config path")
 	binary := fs.String("binary", config.DefaultBinaryPath, "binary path in systemd unit")
 	unit := fs.String("unit", config.DefaultUnitPath(), "target service unit/plist path")
+	emergencyRTTMS := fs.Float64("emergency-rtt-ms", 0, "immediate hot-switch threshold in ms; 0 disables")
 	pretty := fs.Bool("pretty", true, "pretty JSON")
 	_ = fs.Parse(args)
 	applyMode := *apply && !*dryRun
 	rep, err := install.Run(context.Background(), install.Options{
-		Apply:    applyMode,
-		Protocol: *protocol,
-		Config:   *configPath,
-		Binary:   *binary,
-		UnitPath: *unit,
+		Apply:                   applyMode,
+		Protocol:                *protocol,
+		Config:                  *configPath,
+		Binary:                  *binary,
+		UnitPath:                *unit,
+		EmergencyRTTThresholdMS: *emergencyRTTMS,
 	})
 	if err != nil {
 		log.Printf("install completed with probe warning/error: %v", err)
@@ -404,10 +406,15 @@ func renderOverview(configPath string, cfg config.Config, historyPath, metric, s
 	if cfg.Runtime.HistoryRetentionDays > 0 {
 		retention = fmt.Sprintf("%dd", cfg.Runtime.HistoryRetentionDays)
 	}
+	emergencyRTT := "disabled"
+	if cfg.Switching.EmergencyRTTThresholdMS > 0 {
+		emergencyRTT = fmt.Sprintf("%.0f ms", cfg.Switching.EmergencyRTTThresholdMS)
+	}
 	return renderKVTable("Overview", []prettytable.Row{
 		{"Config", configPath},
 		{"Protocol", cfg.Cloudflared.Protocol},
 		{"Switch Strategy", cfg.Switching.Strategy},
+		{"Emergency RTT", emergencyRTT},
 		{"Metrics", cfg.Cloudflared.MetricsURL},
 		{"Ready", cfg.Cloudflared.ReadyURL},
 		{"Slots", cfg.Runtime.SlotsFile},

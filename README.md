@@ -48,6 +48,7 @@ Install the latest release:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto --emergency-rtt-ms 100
 ```
 
 Install and start the daemon immediately:
@@ -172,6 +173,9 @@ The daemon only switches when:
 - and the configured idle window is satisfied.
 
 Emergency switching can bypass the idle requirement when `readyConnections < 2`.
+Set `switching.emergency_rtt_threshold_ms` to a positive value, for example
+`100`, to also hot-switch immediately when a current edge IP probes above that
+median RTT threshold. The default `0` disables this latency fuse.
 Manual `cfpick switch --apply` intentionally bypasses degraded, cooldown, and idle
 gates because it is an explicit operator action. It defaults to blue/green hot
 switching; `--mode restart` is available for the older restart path.
