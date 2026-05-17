@@ -2,11 +2,23 @@ GO ?= go
 VERSION ?= dev
 DIST_DIR ?= dist
 LDFLAGS := -s -w -X main.version=$(VERSION)
+GOFILES := $(shell find . -name '*.go' -not -path './$(DIST_DIR)/*')
+DIST_ASSETS := README.md deploy/cfpick.service deploy/cfedgepickd.service configs/cfpick.example.json configs/cfedgepickd.example.json
 
-.PHONY: fmt test build build-linux dist clean
+.PHONY: fmt fmt-check test build build-linux dist clean
 
 fmt:
-	$(GO)fmt -w $$(find . -name '*.go')
+	$(GO)fmt -w $(GOFILES)
+
+fmt-check:
+	@unformatted="$$($(GO)fmt -l $(GOFILES))"; status="$$?"; \
+	if [ "$$status" -ne 0 ]; then \
+		exit "$$status"; \
+	fi; \
+	if [ -n "$$unformatted" ]; then \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
 
 test:
 	$(GO) test ./...
@@ -25,13 +37,15 @@ build-linux:
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/linux-arm64/cfedgepickd ./cmd/cfedgepickd
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $(DIST_DIR)/linux-arm64/cfedgepickctl ./cmd/cfedgepickctl
 
-dist: build-linux
-	cp README.md deploy/install.sh deploy/cfpick.service configs/cfpick.example.json $(DIST_DIR)/linux-amd64/
-	cp README.md deploy/install.sh deploy/cfpick.service configs/cfpick.example.json $(DIST_DIR)/linux-arm64/
+dist: clean build-linux
+	cp $(DIST_ASSETS) $(DIST_DIR)/linux-amd64/
+	cp $(DIST_ASSETS) $(DIST_DIR)/linux-arm64/
+	install -m 0755 install.sh $(DIST_DIR)/linux-amd64/install.sh
+	install -m 0755 install.sh $(DIST_DIR)/linux-arm64/install.sh
 	tar -C $(DIST_DIR)/linux-amd64 -czf $(DIST_DIR)/cfpick-linux-amd64.tar.gz .
 	tar -C $(DIST_DIR)/linux-arm64 -czf $(DIST_DIR)/cfpick-linux-arm64.tar.gz .
-	tar -C $(DIST_DIR)/linux-amd64 -czf $(DIST_DIR)/cfedgepickd-linux-amd64.tar.gz .
-	tar -C $(DIST_DIR)/linux-arm64 -czf $(DIST_DIR)/cfedgepickd-linux-arm64.tar.gz .
+	install -m 0755 install.sh $(DIST_DIR)/install.sh
+	cd $(DIST_DIR) && if command -v sha256sum >/dev/null 2>&1; then sha256sum cfpick-linux-amd64.tar.gz cfpick-linux-arm64.tar.gz; else shasum -a 256 cfpick-linux-amd64.tar.gz cfpick-linux-arm64.tar.gz; fi > checksums.txt
 
 clean:
 	rm -rf $(DIST_DIR) cfpick cfedgepickd cfedgepickctl

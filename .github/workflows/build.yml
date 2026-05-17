@@ -7,49 +7,71 @@ on:
   pull_request:
   workflow_dispatch:
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22.x"
-          cache: true
-      - run: go test ./...
+permissions:
+  contents: read
 
-  linux:
+jobs:
+  check:
     runs-on: ubuntu-latest
-    needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goarch: amd64
-            suffix: linux-amd64
-          - goarch: arm64
-            suffix: linux-arm64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22.x"
           cache: true
-      - name: Build
-        env:
-          GOOS: linux
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
+      - name: Check formatting
+        run: make fmt-check
+      - name: Test
+        run: make test
+
+  dist:
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+          cache: true
+      - name: Compute version
+        id: version
+        shell: bash
         run: |
-          mkdir -p dist/${{ matrix.suffix }}
-          go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/${{ matrix.suffix }}/cfedgepickd ./cmd/cfedgepickd
-          go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/${{ matrix.suffix }}/cfedgepickctl ./cmd/cfedgepickctl
-          cp README.md dist/${{ matrix.suffix }}/
-          cp deploy/install.sh dist/${{ matrix.suffix }}/
-          cp configs/cfedgepickd.example.json dist/${{ matrix.suffix }}/
-          tar -C dist/${{ matrix.suffix }} -czf dist/cfedgepickd-${{ matrix.suffix }}.tar.gz .
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            ref="${GITHUB_REF_NAME//\//-}"
+            version="${ref}-${GITHUB_SHA::7}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+      - name: Build release archives
+        run: make dist VERSION="${{ steps.version.outputs.version }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: cfedgepickd-${{ matrix.suffix }}
-          path: dist/cfedgepickd-${{ matrix.suffix }}.tar.gz
+          name: cfpick-dist
+          path: |
+            dist/cfpick-linux-amd64.tar.gz
+            dist/cfpick-linux-arm64.tar.gz
+            dist/checksums.txt
+            dist/install.sh
+          if-no-files-found: error
+          retention-days: 14
 
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: dist
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cfpick-dist
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/cfpick-linux-amd64.tar.gz
+            dist/cfpick-linux-arm64.tar.gz
+            dist/checksums.txt
+            dist/install.sh

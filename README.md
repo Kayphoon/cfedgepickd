@@ -35,6 +35,37 @@ Not supported in v1:
 - Docker-only cloudflared management
 - DNS server integration instead of `/etc/hosts`
 
+## Install
+
+Dry-run from the latest GitHub Release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sh -s -- --dry-run
+```
+
+Install the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto
+```
+
+Install and start the daemon immediately:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto --start
+```
+
+Pin a specific release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.8
+```
+
+The installer detects `linux/amd64` and `linux/arm64`, downloads the matching
+release archive, verifies `checksums.txt` when available, installs the binaries,
+writes `/etc/cfpick/config.json`, and writes/enables `cfpick.service`. It does
+not start the daemon unless `--start` is passed.
+
 ## Commands
 
 ```bash
@@ -82,11 +113,11 @@ Supported metrics include `request_rate`, `request_delta`, `error_rate`,
 `goroutines`, `cpu_percent`, `network_rx_rate`, `network_tx_rate`, `rtt`, `ready`,
 `ha`, `concurrent`, `degraded`, and `idle`.
 
-## Build
+## Build And Release
 
 ```bash
 make test
-make dist
+make dist VERSION=v0.2.8
 ```
 
 `make dist` builds static Linux binaries for `linux/amd64` and `linux/arm64`:
@@ -94,7 +125,28 @@ make dist
 ```text
 dist/cfpick-linux-amd64.tar.gz
 dist/cfpick-linux-arm64.tar.gz
+dist/checksums.txt
+dist/install.sh
 ```
+
+Each archive contains `cfpick`, `cfedgepickd`, `cfedgepickctl`, `install.sh`,
+both systemd service files, and both example config files. `cfpick` remains the
+default compatibility install entrypoint, while the `cfedgepickd` daemon and
+`cfedgepickctl` helper are included in the same package.
+
+GitHub Actions runs the same release build for pull requests and pushes to
+`main`, uploading short-lived artifacts for inspection. Pushing a version tag
+creates a GitHub Release and uploads the two Linux archives, `checksums.txt`,
+and `install.sh`:
+
+```bash
+git tag v0.2.8
+git push origin v0.2.8
+```
+
+Tag builds embed the tag name in `cfpick version`, `cfedgepickd version`, and
+`cfedgepickctl version`. Non-tag CI builds embed the branch/ref name plus the
+short commit SHA.
 
 ## Safety
 
