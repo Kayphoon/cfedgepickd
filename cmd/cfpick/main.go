@@ -23,6 +23,7 @@ import (
 	"github.com/kayphoon/cfpick/internal/history"
 	"github.com/kayphoon/cfpick/internal/install"
 	"github.com/kayphoon/cfpick/internal/probe"
+	"github.com/kayphoon/cfpick/internal/slots"
 )
 
 var version = "dev"
@@ -77,6 +78,13 @@ func statusCmd(args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 
+	endpoint := slots.ResolveActiveEndpoint(ctx, cfg)
+	if endpoint.MetricsURL != "" {
+		cfg.Cloudflared.MetricsURL = endpoint.MetricsURL
+	}
+	if endpoint.ReadyURL != "" {
+		cfg.Cloudflared.ReadyURL = endpoint.ReadyURL
+	}
 	historyPath := resolveHistoryPath(cfg.Runtime.HistoryFile)
 
 	ready, readyErr := cloudflared.FetchReady(ctx, cfg.Cloudflared.ReadyURL)
@@ -90,6 +98,8 @@ func statusCmd(args []string) {
 
 	fmt.Printf("cfpick status  %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(renderOverview(path, cfg, historyPath, *metric, *since))
+	fmt.Println()
+	fmt.Println(renderSlots(endpoint))
 	fmt.Println()
 	fmt.Println(renderHealth(ready, readyErr, metrics, metricsErr))
 	fmt.Println()
@@ -190,7 +200,8 @@ func switchCmd(args []string) {
 	fs := flag.NewFlagSet("switch", flag.ExitOnError)
 	configPath := fs.String("config", resolveConfigPath(""), "config file")
 	apply := fs.Bool("apply", false, "update hosts/config and restart cloudflared")
-	mode := fs.String("protocol", "", "auto, quic, or http2")
+	protocol := fs.String("protocol", "", "auto, quic, or http2")
+	switchMode := fs.String("mode", "", "hot or restart")
 	top := fs.Int("top", 0, "override top_n when probing")
 	ipsRaw := fs.String("ips", "", "comma or space separated IPs to apply; skips probing")
 	_ = fs.Parse(args)
@@ -202,8 +213,11 @@ func switchCmd(args []string) {
 	if *top > 0 {
 		cfg.Edge.TopN = *top
 	}
-	if *mode != "" {
-		cfg.Cloudflared.Protocol = *mode
+	if *protocol != "" {
+		cfg.Cloudflared.Protocol = *protocol
+	}
+	if *switchMode != "" {
+		cfg.Switching.Strategy = *switchMode
 	}
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("invalid config: %v", err)
@@ -300,7 +314,7 @@ func installCmd(args []string) {
 	protocol := fs.String("protocol", "auto", "auto, quic, or http2")
 	configPath := fs.String("config", config.DefaultConfigPath, "target config path")
 	binary := fs.String("binary", config.DefaultBinaryPath, "binary path in systemd unit")
-	unit := fs.String("unit", config.DefaultUnitPath, "target systemd unit path")
+	unit := fs.String("unit", config.DefaultUnitPath(), "target service unit/plist path")
 	pretty := fs.Bool("pretty", true, "pretty JSON")
 	_ = fs.Parse(args)
 	applyMode := *apply && !*dryRun
@@ -370,14 +384,34 @@ func renderOverview(configPath string, cfg config.Config, historyPath, metric, s
 	return renderKVTable("Overview", []prettytable.Row{
 		{"Config", configPath},
 		{"Protocol", cfg.Cloudflared.Protocol},
+		{"Switch Strategy", cfg.Switching.Strategy},
 		{"Metrics", cfg.Cloudflared.MetricsURL},
 		{"Ready", cfg.Cloudflared.ReadyURL},
+		{"Slots", cfg.Runtime.SlotsFile},
 		{"History", historyPath},
 		{"Sample Interval", (time.Duration(cfg.Switching.ProbeIntervalSeconds) * time.Second).String()},
 		{"History Retention", retention},
 		{"Window", since},
 		{"Metric", metric},
 	})
+}
+
+func renderSlots(endpoint slots.ActiveEndpoint) string {
+	st := endpoint.State
+	active := endpoint.Slot
+	rows := []prettytable.Row{
+		{"Active", emptyDash(active.Name), emptyDash(active.Service), emptyDash(endpoint.MetricsURL), emptyDash(endpoint.Source)},
+		{"Green", slotStateLabel(st.Active == slots.Green), emptyDash(st.Green.Service), emptyDash(st.Green.MetricsURL), emptyDash(st.LastResult)},
+		{"Blue", slotStateLabel(st.Active == slots.Blue), emptyDash(st.Blue.Service), emptyDash(st.Blue.MetricsURL), emptyDash(st.LastMessage)},
+	}
+	return renderTable("Slots", []interface{}{"Slot", "State", "Service", "Metrics", "Detail"}, rows)
+}
+
+func slotStateLabel(active bool) string {
+	if active {
+		return "ACTIVE"
+	}
+	return "STANDBY"
 }
 
 func renderHealth(ready cloudflared.Ready, readyErr error, metrics cloudflared.Metrics, metricsErr error) string {

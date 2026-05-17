@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -53,7 +54,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	}
 	pr, err := probe.Run(ctx, probeConfigForInstall(cfg), probe.Mode(cfg.Cloudflared.Protocol))
 	cfg.Runtime.DryRun = true
-	unit := RenderUnit(opts.Binary, opts.Config, cfg.Cloudflared.Service)
+	unit := RenderService(opts.Binary, opts.Config, cfg.Cloudflared.Service)
 	rep := Report{Discover: dr, Probe: pr, Config: cfg, Unit: unit}
 	rep.Notes = append(rep.Notes, "installer probe uses a fast sample; daemon keeps full configured probe settings")
 	if !opts.Apply {
@@ -75,15 +76,17 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	}
 	unitPath := opts.UnitPath
 	if unitPath == "" {
-		unitPath = config.DefaultUnitPath
+		unitPath = config.DefaultUnitPath()
 	}
-	if err := os.WriteFile(unitPath, []byte(RenderUnit(opts.Binary, configPath, cfg.Cloudflared.Service)), 0644); err != nil {
+	if err := os.WriteFile(unitPath, []byte(RenderService(opts.Binary, configPath, cfg.Cloudflared.Service)), 0644); err != nil {
 		return rep, err
 	}
-	_ = exec.CommandContext(ctx, "systemctl", "daemon-reload").Run()
+	if runtime.GOOS != "darwin" {
+		_ = exec.CommandContext(ctx, "systemctl", "daemon-reload").Run()
+	}
 	rep.Applied = true
 	rep.Config = cfg
-	rep.Unit = RenderUnit(opts.Binary, configPath, cfg.Cloudflared.Service)
+	rep.Unit = RenderService(opts.Binary, configPath, cfg.Cloudflared.Service)
 	rep.Notes = append(rep.Notes, "wrote "+configPath, "wrote "+unitPath)
 	return rep, err
 }
@@ -119,6 +122,17 @@ func capDuration(v, max string) string {
 }
 
 func RenderUnit(binary, configPath, cloudflaredService string) string {
+	return RenderSystemdUnit(binary, configPath, cloudflaredService)
+}
+
+func RenderService(binary, configPath, cloudflaredService string) string {
+	if runtime.GOOS == "darwin" {
+		return RenderLaunchdPlist(binary, configPath)
+	}
+	return RenderSystemdUnit(binary, configPath, cloudflaredService)
+}
+
+func RenderSystemdUnit(binary, configPath, cloudflaredService string) string {
 	if binary == "" {
 		binary = config.DefaultBinaryPath
 	}
@@ -148,4 +162,38 @@ func RenderUnit(binary, configPath, cloudflaredService string) string {
 		"",
 	}
 	return strings.Join(lines, "\n")
+}
+
+func RenderLaunchdPlist(binary, configPath string) string {
+	if binary == "" {
+		binary = config.DefaultBinaryPath
+	}
+	if configPath == "" {
+		configPath = config.DefaultConfigPath
+	}
+	args := []string{binary, "run", "--config", configPath}
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	b.WriteString(`<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">` + "\n")
+	b.WriteString(`<plist version="1.0">` + "\n<dict>\n")
+	b.WriteString("\t<key>Label</key>\n\t<string>com.kayphoon.cfpick</string>\n")
+	b.WriteString("\t<key>ProgramArguments</key>\n\t<array>\n")
+	for _, arg := range args {
+		b.WriteString("\t\t<string>" + escapeXML(arg) + "</string>\n")
+	}
+	b.WriteString("\t</array>\n")
+	b.WriteString("\t<key>RunAtLoad</key>\n\t<true/>\n")
+	b.WriteString("\t<key>KeepAlive</key>\n\t<true/>\n")
+	b.WriteString("\t<key>StandardOutPath</key>\n\t<string>/var/log/cfpick.log</string>\n")
+	b.WriteString("\t<key>StandardErrorPath</key>\n\t<string>/var/log/cfpick.err.log</string>\n")
+	b.WriteString("</dict>\n</plist>\n")
+	return b.String()
+}
+
+func escapeXML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, `"`, "&quot;")
+	return strings.ReplaceAll(s, "'", "&apos;")
 }

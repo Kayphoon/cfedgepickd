@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -12,11 +13,13 @@ const (
 	ProtocolQUIC  = "quic"
 	ProtocolHTTP2 = "http2"
 
+	SwitchStrategyHot     = "hot"
+	SwitchStrategyRestart = "restart"
+
 	CloudflaredQUICServerName = "quic.cftunnel.com"
 
 	DefaultConfigPath = "/etc/cfpick/config.json"
 	DefaultBinaryPath = "/usr/local/bin/cfpick"
-	DefaultUnitPath   = "/etc/systemd/system/cfpick.service"
 	LegacyConfigPath  = "/etc/cfedgepickd/config.json"
 )
 
@@ -74,17 +77,23 @@ type EdgeConfig struct {
 }
 
 type SwitchingConfig struct {
-	ProbeIntervalSeconds  int     `json:"probe_interval_seconds"`
-	MetricsPollSeconds    int     `json:"metrics_poll_seconds"`
-	IdleWindowSeconds     int     `json:"idle_window_seconds"`
-	CooldownSeconds       int     `json:"cooldown_seconds"`
-	RestartTimeoutSeconds int     `json:"restart_timeout_seconds"`
-	MinImprovementRatio   float64 `json:"min_improvement_ratio"`
-	DegradedFactor        float64 `json:"degraded_factor"`
-	DegradedRounds        int     `json:"degraded_rounds"`
-	AllowEmergencySwitch  bool    `json:"allow_emergency_switch"`
-	RequireIdleForPlanned bool    `json:"require_idle_for_planned"`
-	ApplyProtocolToConfig bool    `json:"apply_protocol_to_config"`
+	ProbeIntervalSeconds   int     `json:"probe_interval_seconds"`
+	MetricsPollSeconds     int     `json:"metrics_poll_seconds"`
+	IdleWindowSeconds      int     `json:"idle_window_seconds"`
+	CooldownSeconds        int     `json:"cooldown_seconds"`
+	RestartTimeoutSeconds  int     `json:"restart_timeout_seconds"`
+	Strategy               string  `json:"strategy"`
+	HotMetricsHost         string  `json:"hot_metrics_host"`
+	HotMetricsPortStart    int     `json:"hot_metrics_port_start"`
+	HotMetricsPortEnd      int     `json:"hot_metrics_port_end"`
+	HotStartTimeoutSeconds int     `json:"hot_start_timeout_seconds"`
+	HotDrainTimeoutSeconds int     `json:"hot_drain_timeout_seconds"`
+	MinImprovementRatio    float64 `json:"min_improvement_ratio"`
+	DegradedFactor         float64 `json:"degraded_factor"`
+	DegradedRounds         int     `json:"degraded_rounds"`
+	AllowEmergencySwitch   bool    `json:"allow_emergency_switch"`
+	RequireIdleForPlanned  bool    `json:"require_idle_for_planned"`
+	ApplyProtocolToConfig  bool    `json:"apply_protocol_to_config"`
 }
 
 type RuntimeConfig struct {
@@ -92,12 +101,35 @@ type RuntimeConfig struct {
 	BackupDir            string `json:"backup_dir"`
 	StateFile            string `json:"state_file"`
 	HistoryFile          string `json:"history_file"`
+	SlotsFile            string `json:"slots_file"`
 	HistoryRetentionDays int    `json:"history_retention_days"`
 	LogLevel             string `json:"log_level"`
 	DryRun               bool   `json:"dry_run"`
 }
 
+func DefaultUnitPath() string {
+	if runtime.GOOS == "darwin" {
+		return "/Library/LaunchDaemons/com.kayphoon.cfpick.plist"
+	}
+	return "/etc/systemd/system/cfpick.service"
+}
+
+func defaultRuntimePaths() (backupDir, stateFile, historyFile, slotsFile string) {
+	if runtime.GOOS == "darwin" {
+		return "/var/db/cfpick/backups", "/var/db/cfpick/state.json", "/var/db/cfpick/history.jsonl", "/var/db/cfpick/slots.json"
+	}
+	return "/var/backups/cfpick", "/var/lib/cfpick/state.json", "/var/lib/cfpick/history.jsonl", "/var/lib/cfpick/slots.json"
+}
+
+func defaultSystemctl() string {
+	if runtime.GOOS == "darwin" {
+		return ""
+	}
+	return "systemctl"
+}
+
 func Default() Config {
+	backupDir, stateFile, historyFile, slotsFile := defaultRuntimePaths()
 	return Config{
 		Cloudflared: CloudflaredConfig{
 			Binary:     "cloudflared",
@@ -106,7 +138,7 @@ func Default() Config {
 			Protocol:   ProtocolAuto,
 			MetricsURL: "http://127.0.0.1:20241/metrics",
 			ReadyURL:   "http://127.0.0.1:20241/ready",
-			Systemctl:  "systemctl",
+			Systemctl:  defaultSystemctl(),
 		},
 		Edge: EdgeConfig{
 			Port:          7844,
@@ -121,23 +153,30 @@ func Default() Config {
 			ServerName:    CloudflaredQUICServerName,
 		},
 		Switching: SwitchingConfig{
-			ProbeIntervalSeconds:  300,
-			MetricsPollSeconds:    5,
-			IdleWindowSeconds:     180,
-			CooldownSeconds:       3600,
-			RestartTimeoutSeconds: 30,
-			MinImprovementRatio:   0.35,
-			DegradedFactor:        3.0,
-			DegradedRounds:        3,
-			AllowEmergencySwitch:  true,
-			RequireIdleForPlanned: true,
-			ApplyProtocolToConfig: true,
+			ProbeIntervalSeconds:   300,
+			MetricsPollSeconds:     5,
+			IdleWindowSeconds:      180,
+			CooldownSeconds:        3600,
+			RestartTimeoutSeconds:  30,
+			Strategy:               SwitchStrategyHot,
+			HotMetricsHost:         "127.0.0.1",
+			HotMetricsPortStart:    20241,
+			HotMetricsPortEnd:      20259,
+			HotStartTimeoutSeconds: 30,
+			HotDrainTimeoutSeconds: 45,
+			MinImprovementRatio:    0.35,
+			DegradedFactor:         3.0,
+			DegradedRounds:         3,
+			AllowEmergencySwitch:   true,
+			RequireIdleForPlanned:  true,
+			ApplyProtocolToConfig:  true,
 		},
 		Runtime: RuntimeConfig{
 			HostsFile:            "/etc/hosts",
-			BackupDir:            "/var/backups/cfpick",
-			StateFile:            "/var/lib/cfpick/state.json",
-			HistoryFile:          "/var/lib/cfpick/history.jsonl",
+			BackupDir:            backupDir,
+			StateFile:            stateFile,
+			HistoryFile:          historyFile,
+			SlotsFile:            slotsFile,
 			HistoryRetentionDays: 30,
 			LogLevel:             "info",
 			DryRun:               true,
@@ -228,6 +267,24 @@ func (c Config) WithDefaults() Config {
 	if c.Switching.RestartTimeoutSeconds == 0 {
 		c.Switching.RestartTimeoutSeconds = def.Switching.RestartTimeoutSeconds
 	}
+	if c.Switching.Strategy == "" {
+		c.Switching.Strategy = def.Switching.Strategy
+	}
+	if c.Switching.HotMetricsHost == "" {
+		c.Switching.HotMetricsHost = def.Switching.HotMetricsHost
+	}
+	if c.Switching.HotMetricsPortStart == 0 {
+		c.Switching.HotMetricsPortStart = def.Switching.HotMetricsPortStart
+	}
+	if c.Switching.HotMetricsPortEnd == 0 {
+		c.Switching.HotMetricsPortEnd = def.Switching.HotMetricsPortEnd
+	}
+	if c.Switching.HotStartTimeoutSeconds == 0 {
+		c.Switching.HotStartTimeoutSeconds = def.Switching.HotStartTimeoutSeconds
+	}
+	if c.Switching.HotDrainTimeoutSeconds == 0 {
+		c.Switching.HotDrainTimeoutSeconds = def.Switching.HotDrainTimeoutSeconds
+	}
 	if c.Switching.MinImprovementRatio == 0 {
 		c.Switching.MinImprovementRatio = def.Switching.MinImprovementRatio
 	}
@@ -248,6 +305,9 @@ func (c Config) WithDefaults() Config {
 	}
 	if c.Runtime.HistoryFile == "" {
 		c.Runtime.HistoryFile = def.Runtime.HistoryFile
+	}
+	if c.Runtime.SlotsFile == "" {
+		c.Runtime.SlotsFile = def.Runtime.SlotsFile
 	}
 	if c.Runtime.HistoryRetentionDays == 0 {
 		c.Runtime.HistoryRetentionDays = def.Runtime.HistoryRetentionDays
@@ -275,6 +335,17 @@ func (c Config) Validate() error {
 	}
 	if _, err := time.ParseDuration(c.Edge.ProbeTimeout); err != nil {
 		return err
+	}
+	switch c.Switching.Strategy {
+	case SwitchStrategyHot, SwitchStrategyRestart:
+	default:
+		return errors.New("switching.strategy must be hot or restart")
+	}
+	if c.Switching.HotMetricsPortStart <= 0 || c.Switching.HotMetricsPortStart > 65535 || c.Switching.HotMetricsPortEnd <= 0 || c.Switching.HotMetricsPortEnd > 65535 {
+		return errors.New("switching hot metrics ports must be between 1 and 65535")
+	}
+	if c.Switching.HotMetricsPortEnd < c.Switching.HotMetricsPortStart {
+		return errors.New("switching.hot_metrics_port_end must be >= hot_metrics_port_start")
 	}
 	return nil
 }

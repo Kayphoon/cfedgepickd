@@ -36,3 +36,13 @@ func TestProbeConfigForInstallCapsHeavyDefaults(t *testing.T) {
 		t.Fatalf("probeConfigForInstall mutated input config")
 	}
 }
+
+func TestRenderLaunchdPlistUsesCfpickRun(t *testing.T) {
+	plist := RenderLaunchdPlist("/usr/local/bin/cfpick", "/etc/cfpick/config.json")
+	if !strings.Contains(plist, "<string>com.kayphoon.cfpick</string>") {
+		t.Fatalf("plist missing label:\n%s", plist)
+	}
+	if !strings.Contains(plist, "<string>/usr/local/bin/cfpick</string>") || !strings.Contains(plist, "<string>run</string>") {
+		t.Fatalf("plist missing cfpick run args:\n%s", plist)
+	}
+}

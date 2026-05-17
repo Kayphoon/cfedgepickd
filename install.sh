@@ -17,11 +17,11 @@ Usage:
   install.sh [--dry-run|--apply] [--protocol auto|quic|http2] [options]
 
 Options:
-  --version VERSION   Release tag to install, for example v0.2.10. Default: latest
+  --version VERSION   Release tag to install, for example v0.2.11. Default: latest
   --repo OWNER/REPO   GitHub repository. Default: Kayphoon/cfpick
   --prefix PATH       Binary install directory. Default: /usr/local/bin
   --config PATH       Config path. Default: /etc/cfpick/config.json
-  --unit PATH         systemd unit path. Default: /etc/systemd/system/cfpick.service
+  --unit PATH         systemd unit or launchd plist path. Default: platform-specific
   --start             Start/restart cfpick.service after installing
   --no-enable         Do not enable cfpick.service
   --help              Show this help
@@ -29,7 +29,7 @@ Options:
 Examples:
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sh -s -- --dry-run
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.10 --start
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.11 --start
 USAGE
 }
 
@@ -59,13 +59,20 @@ need_cmd() {
 }
 
 detect_arch() {
+  os_name="linux"
   case "$(uname -s)" in
-    Linux) ;;
-    *) echo "unsupported OS: $(uname -s); cfpick installer supports Linux only" >&2; exit 1 ;;
+    Linux) os_name="linux" ;;
+    Darwin)
+      os_name="darwin"
+      if [ "$unit" = "/etc/systemd/system/cfpick.service" ]; then
+        unit="/Library/LaunchDaemons/com.kayphoon.cfpick.plist"
+      fi
+      ;;
+    *) echo "unsupported OS: $(uname -s); cfpick installer supports Linux and macOS" >&2; exit 1 ;;
   esac
   case "$(uname -m)" in
-    x86_64|amd64) echo "amd64" ;;
-    aarch64|arm64) echo "arm64" ;;
+    x86_64|amd64) echo "$os_name-amd64" ;;
+    aarch64|arm64) echo "$os_name-arm64" ;;
     *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
   esac
 }
@@ -120,7 +127,7 @@ install_from_dir() {
 
   "$prefix/cfpick" install --apply --protocol "$protocol" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
 
-  if command -v systemctl >/dev/null 2>&1; then
+  if [ "$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
     unit_name="$(basename "$unit")"
     if [ "$enable_service" = "true" ]; then
       systemctl enable "$unit_name"
@@ -132,11 +139,23 @@ install_from_dir() {
         systemctl start "$unit_name"
       fi
     fi
+  elif [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
+    label="$(basename "$unit" .plist)"
+    if [ "$enable_service" = "true" ]; then
+      launchctl bootstrap system "$unit" 2>/dev/null || true
+    fi
+    if [ "$start_service" = "true" ]; then
+      launchctl kickstart -k "system/$label"
+    fi
   fi
 
   echo "installed cfpick; inspect with: cfpick status"
   if [ "$start_service" != "true" ]; then
-    echo "start with: systemctl start $(basename "$unit")"
+    if [ "$(uname -s)" = "Darwin" ]; then
+      echo "start with: launchctl kickstart -k system/$(basename "$unit" .plist)"
+    else
+      echo "start with: systemctl start $(basename "$unit")"
+    fi
   fi
 }
 
@@ -150,8 +169,8 @@ need_cmd tar
 need_cmd mktemp
 need_cmd uname
 
-arch="$(detect_arch)"
-asset="cfpick-linux-$arch.tar.gz"
+platform="$(detect_arch)"
+asset="cfpick-$platform.tar.gz"
 base_url="$(release_base_url)"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT INT TERM

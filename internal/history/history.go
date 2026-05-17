@@ -16,6 +16,10 @@ type Record struct {
 	Time                    time.Time          `json:"time"`
 	ConfigProtocol          string             `json:"config_protocol"`
 	EffectiveProtocol       string             `json:"effective_protocol"`
+	SwitchStrategy          string             `json:"switch_strategy,omitempty"`
+	ActiveSlot              string             `json:"active_slot,omitempty"`
+	MetricsURL              string             `json:"metrics_url,omitempty"`
+	ReadyURL                string             `json:"ready_url,omitempty"`
 	ReadyConnections        int                `json:"ready_connections"`
 	HAConnections           int                `json:"ha_connections"`
 	ConcurrentRequests      int                `json:"concurrent_requests"`

@@ -4,14 +4,15 @@
 selection.
 
 It does not proxy traffic. It probes Cloudflare edge candidates, observes `cloudflared`
-health and idle windows, updates `/etc/hosts`, restarts `cloudflared`, and rolls back
-when the tunnel does not recover.
+health and idle windows, updates `/etc/hosts`, hot-switches between blue/green
+`cloudflared` slots, and rolls back when the new slot does not become healthy.
 
 ## Scope
 
 Supported in v1:
 
 - Linux with systemd
+- macOS with system LaunchDaemon
 - `cloudflared tunnel run`
 - `/etc/hosts` based edge hostname pinning
 - `auto`, `quic`, and `http2` protocol modes
@@ -31,7 +32,7 @@ HTTP/2 if UDP/QUIC breaks later.
 
 Not supported in v1:
 
-- OpenWrt / non-systemd service managers
+- OpenWrt and other service managers
 - Docker-only cloudflared management
 - DNS server integration instead of `/etc/hosts`
 
@@ -58,13 +59,13 @@ curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | s
 Pin a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.10
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.11
 ```
 
-The installer detects `linux/amd64` and `linux/arm64`, downloads the matching
+The installer detects Linux/macOS and `amd64`/`arm64`, downloads the matching
 release archive, verifies `checksums.txt` when available, installs the binaries,
-writes `/etc/cfpick/config.json`, and writes/enables `cfpick.service`. It does
-not start the daemon unless `--start` is passed.
+writes `/etc/cfpick/config.json`, and writes the platform service definition. It
+does not start the daemon unless `--start` is passed.
 
 ## Commands
 
@@ -78,18 +79,20 @@ cfpick once --config /etc/cfpick/config.json
 cfpick switch --config /etc/cfpick/config.json
 cfpick switch --apply --config /etc/cfpick/config.json
 cfpick switch --apply --ips 198.41.200.227,198.41.200.132 --config /etc/cfpick/config.json
+cfpick switch --apply --mode restart --config /etc/cfpick/config.json
 cfpick run --config /etc/cfpick/config.json
 ```
 
 `install --dry-run` only prints discovered config, probe output, and the unit that
 would be installed. `install --apply` writes `/etc/cfpick/config.json` and the
-`cfpick.service` systemd unit.
+platform service unit or plist.
 
 `switch` is the manual replacement command. Without `--apply` it probes and prints
-the planned host mappings. With `--apply` it immediately writes the selected IPs,
-restarts `cloudflared`, waits for `readyConnections >= 2`, and rolls back if the
-restart does not become healthy. Passing `--ips` skips probing and applies those
-IPs directly.
+the planned blue/green switch. With `--apply` it writes the selected IPs, starts
+the inactive slot, waits for `readyConnections >= 2`, gracefully stops the old
+active slot, and rolls back if the new slot does not become healthy. Passing
+`--ips` skips probing and applies those IPs directly. `--mode restart` keeps the
+older restart-based behavior.
 
 ## History And Graphs
 
@@ -126,14 +129,16 @@ Supported metrics include `request_rate`, `request_delta`, `error_rate`,
 
 ```bash
 make test
-make dist VERSION=v0.2.10
+make dist VERSION=v0.2.11
 ```
 
-`make dist` builds static Linux binaries for `linux/amd64` and `linux/arm64`:
+`make dist` builds static binaries for Linux and macOS:
 
 ```text
 dist/cfpick-linux-amd64.tar.gz
 dist/cfpick-linux-arm64.tar.gz
+dist/cfpick-darwin-amd64.tar.gz
+dist/cfpick-darwin-arm64.tar.gz
 dist/checksums.txt
 dist/install.sh
 ```
@@ -145,12 +150,12 @@ default compatibility install entrypoint, while the `cfedgepickd` daemon and
 
 GitHub Actions runs the same release build for pull requests and pushes to
 `main`, uploading short-lived artifacts for inspection. Pushing a version tag
-creates a GitHub Release and uploads the two Linux archives, `checksums.txt`,
+creates a GitHub Release and uploads the platform archives, `checksums.txt`,
 and `install.sh`:
 
 ```bash
-git tag v0.2.10
-git push origin v0.2.10
+git tag v0.2.11
+git push origin v0.2.11
 ```
 
 Tag builds embed the tag name in `cfpick version`, `cfedgepickd version`, and
@@ -168,8 +173,9 @@ The daemon only switches when:
 
 Emergency switching can bypass the idle requirement when `readyConnections < 2`.
 Manual `cfpick switch --apply` intentionally bypasses degraded, cooldown, and idle
-gates because it is an explicit operator action.
+gates because it is an explicit operator action. It defaults to blue/green hot
+switching; `--mode restart` is available for the older restart path.
 
-All hosts/config writes are backed up before restart. If `cloudflared` does not reach
-`readyConnections >= 2` before timeout, the daemon restores the backup and restarts
-`cloudflared` again.
+All hosts/config writes are backed up before a switch. If the inactive slot does not
+reach `readyConnections >= 2` before timeout, cfpick stops it, restores the backup,
+and keeps the old active slot running.

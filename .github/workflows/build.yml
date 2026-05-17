@@ -52,6 +52,8 @@ jobs:
           path: |
             dist/cfpick-linux-amd64.tar.gz
             dist/cfpick-linux-arm64.tar.gz
+            dist/cfpick-darwin-amd64.tar.gz
+            dist/cfpick-darwin-arm64.tar.gz
             dist/checksums.txt
             dist/install.sh
           if-no-files-found: error
@@ -73,5 +75,7 @@ jobs:
           files: |
             dist/cfpick-linux-amd64.tar.gz
             dist/cfpick-linux-arm64.tar.gz
+            dist/cfpick-darwin-amd64.tar.gz
+            dist/cfpick-darwin-arm64.tar.gz
             dist/checksums.txt
             dist/install.sh

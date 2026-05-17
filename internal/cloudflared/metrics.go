@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -205,6 +206,9 @@ func FetchReady(ctx context.Context, url string) (Ready, error) {
 }
 
 func CurrentEdges(ctx context.Context, port int) ([]EdgeConnection, error) {
+	if runtime.GOOS == "darwin" {
+		return currentEdgesLsof(ctx, port)
+	}
 	cmd := exec.CommandContext(ctx, "ss", "-ntp")
 	out, err := cmd.Output()
 	if err != nil {
@@ -225,6 +229,37 @@ func CurrentEdges(ctx context.Context, port int) ([]EdgeConnection, error) {
 			Local:  fields[3],
 			Remote: remote,
 			IP:     ip,
+			Line:   line,
+		})
+	}
+	return conns, nil
+}
+
+func currentEdgesLsof(ctx context.Context, port int) ([]EdgeConnection, error) {
+	cmd := exec.CommandContext(ctx, "lsof", "-nP", "-iTCP:"+strconv.Itoa(port))
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var conns []EdgeConnection
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.Contains(line, "cloudflared") || !strings.Contains(line, "->") || !strings.Contains(line, fmt.Sprintf(":%d", port)) {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		name := fields[len(fields)-1]
+		parts := strings.Split(name, "->")
+		if len(parts) != 2 {
+			continue
+		}
+		remote := strings.TrimSpace(strings.TrimSuffix(parts[1], "(ESTABLISHED)"))
+		conns = append(conns, EdgeConnection{
+			Local:  strings.TrimSpace(parts[0]),
+			Remote: remote,
+			IP:     hostPart(remote),
 			Line:   line,
 		})
 	}

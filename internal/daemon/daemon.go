@@ -13,6 +13,7 @@ import (
 	"github.com/kayphoon/cfpick/internal/history"
 	"github.com/kayphoon/cfpick/internal/hosts"
 	"github.com/kayphoon/cfpick/internal/probe"
+	"github.com/kayphoon/cfpick/internal/slots"
 	"github.com/kayphoon/cfpick/internal/state"
 	"github.com/kayphoon/cfpick/internal/switcher"
 )
@@ -22,6 +23,10 @@ type Decision struct {
 	TopIPs       []string            `json:"top_ips"`
 	CurrentIPs   []string            `json:"current_ips"`
 	Forced       bool                `json:"forced,omitempty"`
+	Strategy     string              `json:"strategy,omitempty"`
+	ActiveSlot   string              `json:"active_slot,omitempty"`
+	MetricsURL   string              `json:"metrics_url,omitempty"`
+	ReadyURL     string              `json:"ready_url,omitempty"`
 	Idle         bool                `json:"idle"`
 	DegradedRaw  bool                `json:"degraded_raw"`
 	Degraded     bool                `json:"degraded"`
@@ -36,6 +41,16 @@ type Decision struct {
 
 func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switcher.Result, error) {
 	cfg = cfg.WithDefaults()
+	endpoint := slots.ResolveActiveEndpoint(ctx, cfg)
+	if endpoint.MetricsURL != "" {
+		cfg.Cloudflared.MetricsURL = endpoint.MetricsURL
+	}
+	if endpoint.ReadyURL != "" {
+		cfg.Cloudflared.ReadyURL = endpoint.ReadyURL
+	}
+	if cfg.Switching.Strategy == config.SwitchStrategyRestart && endpoint.Slot.Service != "" && endpoint.Slot.Name != "config" {
+		cfg.Cloudflared.Service = endpoint.Slot.Service
+	}
 	st, _ := state.Load(cfg.Runtime.StateFile)
 	metrics, err := cloudflared.FetchMetrics(ctx, cfg.Cloudflared.MetricsURL)
 	if err != nil {
@@ -89,6 +104,10 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 		Protocol:     pr.EffectiveProtocol,
 		TopIPs:       topIPs,
 		CurrentIPs:   currentIPs,
+		Strategy:     cfg.Switching.Strategy,
+		ActiveSlot:   endpoint.Slot.Name,
+		MetricsURL:   cfg.Cloudflared.MetricsURL,
+		ReadyURL:     cfg.Cloudflared.ReadyURL,
 		Idle:         idle,
 		DegradedRaw:  rawDegraded,
 		Degraded:     degraded,
@@ -131,6 +150,16 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 
 func SwitchNow(ctx context.Context, cfg config.Config, ips []string, apply bool) (Decision, *switcher.Result, error) {
 	cfg = cfg.WithDefaults()
+	endpoint := slots.ResolveActiveEndpoint(ctx, cfg)
+	if endpoint.MetricsURL != "" {
+		cfg.Cloudflared.MetricsURL = endpoint.MetricsURL
+	}
+	if endpoint.ReadyURL != "" {
+		cfg.Cloudflared.ReadyURL = endpoint.ReadyURL
+	}
+	if cfg.Switching.Strategy == config.SwitchStrategyRestart && endpoint.Slot.Service != "" && endpoint.Slot.Name != "config" {
+		cfg.Cloudflared.Service = endpoint.Slot.Service
+	}
 	st, _ := state.Load(cfg.Runtime.StateFile)
 	metrics, metricsErr := cloudflared.FetchMetrics(ctx, cfg.Cloudflared.MetricsURL)
 	ready, readyErr := cloudflared.FetchReady(ctx, cfg.Cloudflared.ReadyURL)
@@ -176,6 +205,10 @@ func SwitchNow(ctx context.Context, cfg config.Config, ips []string, apply bool)
 		TopIPs:       ips,
 		CurrentIPs:   currentIPs,
 		Forced:       true,
+		Strategy:     cfg.Switching.Strategy,
+		ActiveSlot:   endpoint.Slot.Name,
+		MetricsURL:   cfg.Cloudflared.MetricsURL,
+		ReadyURL:     cfg.Cloudflared.ReadyURL,
 		Idle:         true,
 		DegradedRaw:  true,
 		Degraded:     true,
@@ -240,6 +273,10 @@ func appendHistory(cfg config.Config, decision Decision, sw *switcher.Result, sw
 		Time:                    time.Now().UTC(),
 		ConfigProtocol:          cfg.Cloudflared.Protocol,
 		EffectiveProtocol:       decision.Protocol,
+		SwitchStrategy:          decision.Strategy,
+		ActiveSlot:              decision.ActiveSlot,
+		MetricsURL:              decision.MetricsURL,
+		ReadyURL:                decision.ReadyURL,
 		ReadyConnections:        decision.Ready.ReadyConnections,
 		HAConnections:           decision.Metrics.HAConnections,
 		ConcurrentRequests:      decision.Metrics.ConcurrentRequests,

@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/kayphoon/cfpick/internal/config"
+	"github.com/kayphoon/cfpick/internal/service"
 )
 
 type Report struct {
@@ -27,7 +29,9 @@ func Run(ctx context.Context) (Report, error) {
 	cfg := config.Default()
 	rep := Report{Config: cfg}
 
-	if path, err := exec.LookPath("systemctl"); err == nil {
+	if runtime.GOOS == "darwin" {
+		cfg.Cloudflared.Systemctl = ""
+	} else if path, err := exec.LookPath("systemctl"); err == nil {
 		cfg.Cloudflared.Systemctl = path
 	} else {
 		rep.Warnings = append(rep.Warnings, "systemctl not found; only systemd Linux is supported in v1")
@@ -38,27 +42,47 @@ func Run(ctx context.Context) (Report, error) {
 		cfg.Cloudflared.Binary = "/usr/local/bin/cloudflared"
 	}
 
-	service, err := findCloudflaredService(ctx, cfg.Cloudflared.Systemctl)
-	if err == nil && service != "" {
-		cfg.Cloudflared.Service = service
-		rep.Notes = append(rep.Notes, "found cloudflared service: "+service)
+	if runtime.GOOS == "darwin" {
+		slot, args, err := service.NewManager().DiscoverGreen(ctx, cfg)
+		if err == nil {
+			cfg.Cloudflared.Service = slot.Service
+			cfg.Cloudflared.MetricsURL = slot.MetricsURL
+			cfg.Cloudflared.ReadyURL = slot.ReadyURL
+			if len(args) > 0 {
+				if p := parseConfigPath(strings.Join(args, " ")); p != "" {
+					cfg.Cloudflared.ConfigPath = p
+				}
+				if m := service.MetricsArg(args); m != "" {
+					cfg.Cloudflared.MetricsURL = normalizeMetricsURL(m, "/metrics")
+					cfg.Cloudflared.ReadyURL = normalizeMetricsURL(m, "/ready")
+				}
+			}
+			rep.Notes = append(rep.Notes, "found cloudflared launchd service: "+slot.Service)
+		} else {
+			rep.Warnings = append(rep.Warnings, "cloudflared launchd discovery failed: "+err.Error())
+		}
+	} else if serviceName, err := findCloudflaredService(ctx, cfg.Cloudflared.Systemctl); err == nil && serviceName != "" {
+		cfg.Cloudflared.Service = serviceName
+		rep.Notes = append(rep.Notes, "found cloudflared service: "+serviceName)
 	} else if err != nil {
 		rep.Warnings = append(rep.Warnings, "cloudflared service discovery failed: "+err.Error())
 	}
 
-	if unit, err := systemctlCat(ctx, cfg.Cloudflared.Systemctl, cfg.Cloudflared.Service); err == nil {
-		if bin := parseExecBinary(unit); bin != "" {
-			cfg.Cloudflared.Binary = bin
+	if runtime.GOOS != "darwin" {
+		if unit, err := systemctlCat(ctx, cfg.Cloudflared.Systemctl, cfg.Cloudflared.Service); err == nil {
+			if bin := parseExecBinary(unit); bin != "" {
+				cfg.Cloudflared.Binary = bin
+			}
+			if p := parseConfigPath(unit); p != "" {
+				cfg.Cloudflared.ConfigPath = p
+			}
+			if m := parseMetricsArg(unit); m != "" {
+				cfg.Cloudflared.MetricsURL = normalizeMetricsURL(m, "/metrics")
+				cfg.Cloudflared.ReadyURL = normalizeMetricsURL(m, "/ready")
+			}
+		} else {
+			rep.Warnings = append(rep.Warnings, "systemctl cat failed: "+err.Error())
 		}
-		if p := parseConfigPath(unit); p != "" {
-			cfg.Cloudflared.ConfigPath = p
-		}
-		if m := parseMetricsArg(unit); m != "" {
-			cfg.Cloudflared.MetricsURL = normalizeMetricsURL(m, "/metrics")
-			cfg.Cloudflared.ReadyURL = normalizeMetricsURL(m, "/ready")
-		}
-	} else {
-		rep.Warnings = append(rep.Warnings, "systemctl cat failed: "+err.Error())
 	}
 
 	if protocol, err := parseProtocol(cfg.Cloudflared.ConfigPath); err == nil && protocol != "" {
@@ -67,12 +91,12 @@ func Run(ctx context.Context) (Report, error) {
 	}
 
 	if !probeHTTP(ctx, cfg.Cloudflared.MetricsURL) {
-		if metricsURL, ok := scanMetrics(ctx); ok {
+		if metricsURL, ok := scanMetrics(ctx, cfg.Switching.HotMetricsPortStart, cfg.Switching.HotMetricsPortEnd); ok {
 			cfg.Cloudflared.MetricsURL = metricsURL + "/metrics"
 			cfg.Cloudflared.ReadyURL = metricsURL + "/ready"
 			rep.MetricsFound = true
 		} else {
-			rep.Warnings = append(rep.Warnings, "metrics endpoint not found on 127.0.0.1:20241-20245")
+			rep.Warnings = append(rep.Warnings, fmt.Sprintf("metrics endpoint not found on 127.0.0.1:%d-%d", cfg.Switching.HotMetricsPortStart, cfg.Switching.HotMetricsPortEnd))
 		}
 	} else {
 		rep.MetricsFound = true
@@ -187,8 +211,8 @@ func probeHTTP(ctx context.Context, url string) bool {
 	return resp.StatusCode >= 200 && resp.StatusCode < 500
 }
 
-func scanMetrics(ctx context.Context) (string, bool) {
-	for port := 20241; port <= 20245; port++ {
+func scanMetrics(ctx context.Context, start, end int) (string, bool) {
+	for port := start; port <= end; port++ {
 		base := fmt.Sprintf("http://127.0.0.1:%d", port)
 		if probeHTTP(ctx, base+"/metrics") && probeHTTP(ctx, base+"/ready") {
 			return base, true
