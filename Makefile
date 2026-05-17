@@ -3,7 +3,7 @@ VERSION ?= dev
 DIST_DIR ?= dist
 LDFLAGS := -s -w -X main.version=$(VERSION)
 GOFILES := $(shell find . -name '*.go' -not -path './$(DIST_DIR)/*')
-DIST_ASSETS := README.md deploy/cfpick.service deploy/cfedgepickd.service configs/cfpick.example.json configs/cfedgepickd.example.json
+DIST_ASSETS := README.md README.zh-CN.md deploy/cfpick.service deploy/cfedgepickd.service configs/cfpick.example.json configs/cfedgepickd.example.json
 
 .PHONY: fmt fmt-check test build build-linux build-darwin dist clean
 

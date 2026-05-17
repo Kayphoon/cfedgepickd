@@ -120,15 +120,24 @@ func installCmd(args []string) {
 	configPath := fs.String("config", "/etc/cfedgepickd/config.json", "target config path")
 	binary := fs.String("binary", "/usr/local/bin/cfedgepickd", "daemon binary path in systemd unit")
 	unit := fs.String("unit", "/etc/systemd/system/cfedgepickd.service", "target systemd unit path")
+	langFlag := fs.String("lang", "", "default status language: en or zh")
+	zhFlag := fs.Bool("zh", false, "shortcut for --lang zh")
 	pretty := fs.Bool("pretty", true, "pretty JSON")
 	_ = fs.Parse(args)
 	applyMode := *apply && !*dryRun
+	language := installLanguage(*langFlag, *zhFlag)
+	if language != "" {
+		if _, ok := config.ParseLanguage(language); !ok {
+			log.Fatalf("invalid --lang: %s", language)
+		}
+	}
 	rep, err := install.Run(context.Background(), install.Options{
 		Apply:    applyMode,
 		Protocol: *protocol,
 		Config:   *configPath,
 		Binary:   *binary,
 		UnitPath: *unit,
+		Language: language,
 	})
 	if err != nil {
 		log.Printf("install completed with probe warning/error: %v", err)
@@ -155,6 +164,13 @@ func printJSON(v any, pretty bool) {
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "usage: cfedgepickctl discover|probe|graph|install|version [flags]\n")
+}
+
+func installLanguage(raw string, zh bool) string {
+	if zh {
+		return config.LanguageZH
+	}
+	return strings.TrimSpace(raw)
 }
 
 func parseWindow(raw string) (time.Duration, error) {

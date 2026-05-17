@@ -62,6 +62,7 @@
     "history_file": "/var/lib/cfedgepickd/history.jsonl",
     "slots_file": "/var/lib/cfedgepickd/slots.json",
     "history_retention_days": 30,
+    "language": "en",
     "log_level": "info",
     "dry_run": true
   }

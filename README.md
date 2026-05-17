@@ -1,5 +1,7 @@
 # cfpick
 
+[中文文档](README.zh-CN.md)
+
 `cfpick` is a small control-plane daemon and CLI for `cloudflared` Tunnel edge IP
 selection.
 
@@ -44,6 +46,12 @@ Install the latest release and start the daemon:
 curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh
 ```
 
+Install with Chinese status output as the default:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --zh
+```
+
 Enable the 100ms emergency hot-switch threshold during install:
 
 ```bash
@@ -61,7 +69,9 @@ release archive, verifies `checksums.txt` when available, installs the binaries,
 writes `/etc/cfpick/config.json`, writes the platform service definition, enables
 the daemon, and starts it. Use `--dry-run` only when you want a preview without
 changing the machine, and `--no-start` when you want to install without starting
-the daemon.
+the daemon. Use `--lang zh` or `--zh` during installation when you want
+`cfpick status` to default to Chinese labels; omit it or pass `--lang en` for
+English.
 
 ## Commands
 
@@ -104,7 +114,9 @@ a negative number to disable pruning.
 Use `cfpick status` to show a terminal dashboard. It renders a unified status
 summary, active edge sockets, edge comparison, latest decision state, and a
 time-ordered line chart. The default chart overlays request rate and error rate
-with different colors. Use `--lang zh` or `--zh` for Chinese labels:
+with different colors. The default language comes from `runtime.language` in the
+config written by the installer, and `--lang` or `--zh` can override it for a
+single command:
 
 ```bash
 cfpick status --metric request_rate --since 24h

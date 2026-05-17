@@ -16,6 +16,9 @@ func TestDefaultSamplingAndRetention(t *testing.T) {
 	if cfg.Runtime.HistoryRetentionDays != 30 {
 		t.Fatalf("history retention=%d, want 30", cfg.Runtime.HistoryRetentionDays)
 	}
+	if cfg.Runtime.Language != LanguageEN {
+		t.Fatalf("runtime language=%q, want en", cfg.Runtime.Language)
+	}
 	if cfg.Runtime.SlotsFile == "" {
 		t.Fatal("slots file default is empty")
 	}
@@ -33,6 +36,9 @@ func TestWithDefaultsFillsHistoryRetention(t *testing.T) {
 	if cfg.Runtime.HistoryRetentionDays != 30 {
 		t.Fatalf("history retention=%d, want 30", cfg.Runtime.HistoryRetentionDays)
 	}
+	if cfg.Runtime.Language != LanguageEN {
+		t.Fatalf("runtime language=%q, want en", cfg.Runtime.Language)
+	}
 }
 
 func TestWithDefaultsCanDisableHistoryRetention(t *testing.T) {
@@ -49,5 +55,21 @@ func TestValidateRejectsNegativeEmergencyRTTThreshold(t *testing.T) {
 	cfg.Switching.EmergencyRTTThresholdMS = -1
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected negative emergency RTT threshold to be invalid")
+	}
+}
+
+func TestLanguageParsingAndValidation(t *testing.T) {
+	if got := NormalizeLanguage("zh-CN"); got != LanguageZH {
+		t.Fatalf("NormalizeLanguage zh-CN=%q, want zh", got)
+	}
+	cfg := Default()
+	cfg.Runtime.Language = "zh-CN"
+	cfg = cfg.WithDefaults()
+	if cfg.Runtime.Language != LanguageZH {
+		t.Fatalf("WithDefaults language=%q, want zh", cfg.Runtime.Language)
+	}
+	cfg.Runtime.Language = "bad"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected invalid runtime.language to be rejected")
 	}
 }
