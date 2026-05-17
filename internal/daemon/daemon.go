@@ -62,6 +62,9 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 	}
 	conns, _ := cloudflared.CurrentEdges(ctx, cfg.Edge.Port)
 	currentIPs := edgeIPs(conns)
+	if len(currentIPs) == 0 {
+		currentIPs = currentHostIPs(cfg)
+	}
 	pr, err := probe.Run(ctx, cfg, probe.Mode(cfg.Cloudflared.Protocol))
 	if err != nil {
 		return Decision{}, nil, err
@@ -165,6 +168,9 @@ func SwitchNow(ctx context.Context, cfg config.Config, ips []string, apply bool)
 	ready, readyErr := cloudflared.FetchReady(ctx, cfg.Cloudflared.ReadyURL)
 	conns, _ := cloudflared.CurrentEdges(ctx, cfg.Edge.Port)
 	currentIPs := edgeIPs(conns)
+	if len(currentIPs) == 0 {
+		currentIPs = currentHostIPs(cfg)
+	}
 
 	var pr probe.Report
 	var err error
@@ -418,6 +424,24 @@ func edgeIPs(conns []cloudflared.EdgeConnection) []string {
 			seen[c.IP] = true
 			ips = append(ips, c.IP)
 		}
+	}
+	return ips
+}
+
+func currentHostIPs(cfg config.Config) []string {
+	current, err := hosts.Current(cfg.Runtime.HostsFile, cfg.Edge.Hostnames)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var ips []string
+	for _, h := range cfg.Edge.Hostnames {
+		ip := current[h]
+		if ip == "" || seen[ip] {
+			continue
+		}
+		seen[ip] = true
+		ips = append(ips, ip)
 	}
 	return ips
 }

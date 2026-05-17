@@ -21,6 +21,7 @@ import (
 	"github.com/kayphoon/cfpick/internal/daemon"
 	"github.com/kayphoon/cfpick/internal/discover"
 	"github.com/kayphoon/cfpick/internal/history"
+	"github.com/kayphoon/cfpick/internal/hosts"
 	"github.com/kayphoon/cfpick/internal/install"
 	"github.com/kayphoon/cfpick/internal/probe"
 	"github.com/kayphoon/cfpick/internal/slots"
@@ -90,6 +91,11 @@ func statusCmd(args []string) {
 	ready, readyErr := cloudflared.FetchReady(ctx, cfg.Cloudflared.ReadyURL)
 	metrics, metricsErr := cloudflared.FetchMetrics(ctx, cfg.Cloudflared.MetricsURL)
 	conns, edgesErr := cloudflared.CurrentEdges(ctx, cfg.Edge.Port)
+	if edgesErr == nil && len(conns) == 0 {
+		if current, err := hosts.Current(cfg.Runtime.HostsFile, cfg.Edge.Hostnames); err == nil {
+			conns = hostMappingEdges(current, cfg.Edge.Hostnames)
+		}
+	}
 
 	records, err := history.ReadSince(historyPath, time.Now().Add(-window))
 	if err != nil {
@@ -374,6 +380,23 @@ func edgeRemotes(conns []cloudflared.EdgeConnection) []string {
 		out = append(out, c.Remote)
 	}
 	return out
+}
+
+func hostMappingEdges(current map[string]string, hostnames []string) []cloudflared.EdgeConnection {
+	conns := make([]cloudflared.EdgeConnection, 0, len(hostnames))
+	for _, h := range hostnames {
+		ip := current[h]
+		if ip == "" {
+			continue
+		}
+		conns = append(conns, cloudflared.EdgeConnection{
+			Local:  "hosts file fallback",
+			Remote: h,
+			IP:     ip,
+			Line:   ip + " " + h,
+		})
+	}
+	return conns
 }
 
 func renderOverview(configPath string, cfg config.Config, historyPath, metric, since string) string {
