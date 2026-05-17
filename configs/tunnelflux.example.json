@@ -26,7 +26,11 @@
       "198.41.197.0/24",
       "198.41.198.0/24",
       "198.41.199.0/24",
-      "198.41.200.0/24"
+      "198.41.200.0/24",
+      "2606:4700:a0::/124",
+      "2606:4700:a1::/124",
+      "2606:4700:a8::/124",
+      "2606:4700:a9::/124"
     ],
     "top_n": 4,
     "probe_rounds": 8,
@@ -57,10 +61,10 @@
   },
   "runtime": {
     "hosts_file": "/etc/hosts",
-    "backup_dir": "/var/backups/cfedgepickd",
-    "state_file": "/var/lib/cfedgepickd/state.json",
-    "history_file": "/var/lib/cfedgepickd/history.jsonl",
-    "slots_file": "/var/lib/cfedgepickd/slots.json",
+    "backup_dir": "/var/backups/tunnelflux",
+    "state_file": "/var/lib/tunnelflux/state.json",
+    "history_file": "/var/lib/tunnelflux/history.jsonl",
+    "slots_file": "/var/lib/tunnelflux/slots.json",
     "history_retention_days": 30,
     "log_level": "info",
     "dry_run": true

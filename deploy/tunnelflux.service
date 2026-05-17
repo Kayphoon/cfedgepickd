@@ -1,11 +1,11 @@
 [Unit]
-Description=cfpick Cloudflare edge IP picker for cloudflared
+Description=TunnelFlux Cloudflare edge IP steering for cloudflared
 After=network-online.target cloudflared.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/cfpick run --config /etc/cfpick/config.json
+ExecStart=/usr/local/bin/tf run --config /etc/tunnelflux/config.json
 Restart=on-failure
 RestartSec=10s
 

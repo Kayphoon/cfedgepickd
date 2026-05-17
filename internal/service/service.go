@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/slots"
+	"github.com/kayphoon/tunnelflux/internal/config"
+	"github.com/kayphoon/tunnelflux/internal/slots"
 )
 
 type SlotStatus struct {
@@ -105,7 +105,7 @@ func RenderSystemdUnit(serviceName string, args []string) string {
 	}
 	lines := []string{
 		"[Unit]",
-		"Description=cfpick blue cloudflared slot",
+		"Description=TunnelFlux blue cloudflared slot",
 		"After=network-online.target",
 		"Wants=network-online.target",
 		"",
@@ -136,8 +136,8 @@ func RenderLaunchdPlist(label string, args []string) string {
 	b.WriteString("\t</array>\n")
 	b.WriteString("\t<key>RunAtLoad</key>\n\t<true/>\n")
 	b.WriteString("\t<key>KeepAlive</key>\n\t<dict>\n\t\t<key>SuccessfulExit</key>\n\t\t<false/>\n\t</dict>\n")
-	writePlistKeyString(&b, "StandardOutPath", "/var/log/cfpick-cloudflared-blue.log")
-	writePlistKeyString(&b, "StandardErrorPath", "/var/log/cfpick-cloudflared-blue.err.log")
+	writePlistKeyString(&b, "StandardOutPath", "/var/log/tunnelflux-cloudflared-blue.log")
+	writePlistKeyString(&b, "StandardErrorPath", "/var/log/tunnelflux-cloudflared-blue.err.log")
 	b.WriteString("</dict>\n</plist>\n")
 	return b.String()
 }

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfpick/internal/cloudflared"
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/hosts"
-	"github.com/kayphoon/cfpick/internal/service"
-	"github.com/kayphoon/cfpick/internal/slots"
+	"github.com/kayphoon/tunnelflux/internal/cloudflared"
+	"github.com/kayphoon/tunnelflux/internal/config"
+	"github.com/kayphoon/tunnelflux/internal/hosts"
+	"github.com/kayphoon/tunnelflux/internal/service"
+	"github.com/kayphoon/tunnelflux/internal/slots"
 )
 
 type Result struct {
@@ -389,7 +389,7 @@ func updateProtocol(path, backupDir, protocol string) (string, error) {
 	if !strings.HasSuffix(next, "\n") {
 		next += "\n"
 	}
-	tmp := path + ".cfpick.tmp"
+	tmp := path + ".tunnelflux.tmp"
 	if err := os.WriteFile(tmp, []byte(next), 0644); err != nil {
 		return backup, err
 	}
@@ -405,7 +405,7 @@ func restoreFile(path, backup string) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".cfpick.restore.tmp"
+	tmp := path + ".tunnelflux.restore.tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return err
 	}

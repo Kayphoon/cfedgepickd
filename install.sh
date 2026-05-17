@@ -1,14 +1,14 @@
 #!/usr/bin/env sh
 set -eu
 
-repo="Kayphoon/cfpick"
+repo="Kayphoon/TunnelFlux"
 version="latest"
 mode="apply"
 protocol="auto"
 emergency_rtt_ms="0"
 prefix="/usr/local/bin"
-config="/etc/cfpick/config.json"
-unit="/etc/systemd/system/cfpick.service"
+config="/etc/tunnelflux/config.json"
+unit="/etc/systemd/system/tunnelflux.service"
 start_service="true"
 enable_service="true"
 
@@ -30,16 +30,16 @@ Options:
 Advanced options:
   --dry-run           Preview discovery and planned writes without changing files
   --protocol MODE     auto, quic, or http2. Default: auto
-  --repo OWNER/REPO   GitHub repository. Default: Kayphoon/cfpick
+  --repo OWNER/REPO   GitHub repository. Default: Kayphoon/TunnelFlux
   --prefix PATH       Binary install directory. Default: /usr/local/bin
-  --config PATH       Config path. Default: /etc/cfpick/config.json
+  --config PATH       Config path. Default: /etc/tunnelflux/config.json
   --unit PATH         systemd unit or launchd plist path. Default: platform-specific
-  --no-enable         Do not enable cfpick.service
+  --no-enable         Do not enable tunnelflux.service
 
 Examples:
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --emergency-rtt-ms 100
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --version v0.2.13
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --emergency-rtt-ms 100
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --version v0.2.13
 USAGE
 }
 
@@ -76,11 +76,11 @@ detect_arch() {
     Linux) os_name="linux" ;;
     Darwin)
       os_name="darwin"
-      if [ "$unit" = "/etc/systemd/system/cfpick.service" ]; then
-        unit="/Library/LaunchDaemons/com.kayphoon.cfpick.plist"
+      if [ "$unit" = "/etc/systemd/system/tunnelflux.service" ]; then
+        unit="/Library/LaunchDaemons/com.kayphoon.tunnelflux.plist"
       fi
       ;;
-    *) echo "unsupported OS: $(uname -s); cfpick installer supports Linux and macOS" >&2; exit 1 ;;
+    *) echo "unsupported OS: $(uname -s); TunnelFlux installer supports Linux and macOS" >&2; exit 1 ;;
   esac
   case "$(uname -m)" in
     x86_64|amd64) echo "$os_name-amd64" ;;
@@ -114,13 +114,13 @@ verify_checksum() {
 
 install_from_dir() {
   package_dir="$1"
-  if [ ! -x "$package_dir/cfpick" ]; then
-    echo "cfpick binary not found in $package_dir" >&2
+  if [ ! -x "$package_dir/tf" ]; then
+    echo "tf binary not found in $package_dir" >&2
     exit 1
   fi
 
   if [ "$mode" = "dry-run" ]; then
-    "$package_dir/cfpick" install --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
+    "$package_dir/tf" install --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/tf" --unit "$unit"
     exit 0
   fi
 
@@ -129,15 +129,9 @@ install_from_dir() {
     exit 1
   fi
 
-  install -m 0755 "$package_dir/cfpick" "$prefix/cfpick"
-  if [ -f "$package_dir/cfedgepickd" ]; then
-    install -m 0755 "$package_dir/cfedgepickd" "$prefix/cfedgepickd"
-  fi
-  if [ -f "$package_dir/cfedgepickctl" ]; then
-    install -m 0755 "$package_dir/cfedgepickctl" "$prefix/cfedgepickctl"
-  fi
+  install -m 0755 "$package_dir/tf" "$prefix/tf"
 
-  "$prefix/cfpick" install --apply --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
+  "$prefix/tf" install --apply --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/tf" --unit "$unit"
 
   if [ "$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
     unit_name="$(basename "$unit")"
@@ -161,7 +155,7 @@ install_from_dir() {
     fi
   fi
 
-  echo "installed cfpick; inspect with: cfpick status"
+  echo "installed TunnelFlux; inspect with: tf status"
   if [ "$start_service" != "true" ]; then
     if [ "$(uname -s)" = "Darwin" ]; then
       echo "start with: launchctl kickstart -k system/$(basename "$unit" .plist)"
@@ -172,7 +166,7 @@ install_from_dir() {
 }
 
 script_dir="$(CDPATH= cd "$(dirname "$0")" && pwd)"
-if [ -x "$script_dir/cfpick" ]; then
+if [ -x "$script_dir/tf" ]; then
   install_from_dir "$script_dir"
 fi
 
@@ -182,7 +176,7 @@ need_cmd mktemp
 need_cmd uname
 
 platform="$(detect_arch)"
-asset="cfpick-$platform.tar.gz"
+asset="tunnelflux-$platform.tar.gz"
 base_url="$(release_base_url)"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT INT TERM

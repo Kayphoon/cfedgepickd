@@ -18,9 +18,8 @@ const (
 
 	CloudflaredQUICServerName = "quic.cftunnel.com"
 
-	DefaultConfigPath = "/etc/cfpick/config.json"
-	DefaultBinaryPath = "/usr/local/bin/cfpick"
-	LegacyConfigPath  = "/etc/cfedgepickd/config.json"
+	DefaultConfigPath = "/etc/tunnelflux/config.json"
+	DefaultBinaryPath = "/usr/local/bin/tf"
 )
 
 var DefaultHostnames = []string{
@@ -110,16 +109,16 @@ type RuntimeConfig struct {
 
 func DefaultUnitPath() string {
 	if runtime.GOOS == "darwin" {
-		return "/Library/LaunchDaemons/com.kayphoon.cfpick.plist"
+		return "/Library/LaunchDaemons/com.kayphoon.tunnelflux.plist"
 	}
-	return "/etc/systemd/system/cfpick.service"
+	return "/etc/systemd/system/tunnelflux.service"
 }
 
 func defaultRuntimePaths() (backupDir, stateFile, historyFile, slotsFile string) {
 	if runtime.GOOS == "darwin" {
-		return "/var/db/cfpick/backups", "/var/db/cfpick/state.json", "/var/db/cfpick/history.jsonl", "/var/db/cfpick/slots.json"
+		return "/var/db/tunnelflux/backups", "/var/db/tunnelflux/state.json", "/var/db/tunnelflux/history.jsonl", "/var/db/tunnelflux/slots.json"
 	}
-	return "/var/backups/cfpick", "/var/lib/cfpick/state.json", "/var/lib/cfpick/history.jsonl", "/var/lib/cfpick/slots.json"
+	return "/var/backups/tunnelflux", "/var/lib/tunnelflux/state.json", "/var/lib/tunnelflux/history.jsonl", "/var/lib/tunnelflux/slots.json"
 }
 
 func defaultSystemctl() string {

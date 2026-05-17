@@ -4,7 +4,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/kayphoon/cfpick/internal/config"
+	"github.com/kayphoon/tunnelflux/internal/config"
 )
 
 func TestDefaultStateUsesConfigMetricsForGreen(t *testing.T) {
@@ -52,10 +52,10 @@ func TestStateActiveAndInactiveSlots(t *testing.T) {
 }
 
 func TestBlueServiceNameIsPlatformSpecific(t *testing.T) {
-	if got := BlueServiceName("linux"); got != "cfpick-cloudflared-blue" {
+	if got := BlueServiceName("linux"); got != "tunnelflux-cloudflared-blue" {
 		t.Fatalf("linux blue service=%q", got)
 	}
-	if got := BlueServiceName("darwin"); got != "com.kayphoon.cfpick.cloudflared-blue" {
+	if got := BlueServiceName("darwin"); got != "com.kayphoon.tunnelflux.cloudflared-blue" {
 		t.Fatalf("darwin blue service=%q", got)
 	}
 }

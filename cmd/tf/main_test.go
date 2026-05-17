@@ -6,10 +6,10 @@ import (
 	"time"
 
 	prettytable "github.com/jedib0t/go-pretty/v6/table"
-	"github.com/kayphoon/cfpick/internal/cloudflared"
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/history"
-	"github.com/kayphoon/cfpick/internal/slots"
+	"github.com/kayphoon/tunnelflux/internal/cloudflared"
+	"github.com/kayphoon/tunnelflux/internal/config"
+	"github.com/kayphoon/tunnelflux/internal/history"
+	"github.com/kayphoon/tunnelflux/internal/slots"
 )
 
 func TestParseWindow(t *testing.T) {
@@ -207,9 +207,9 @@ func TestRenderStatusSummaryChinese(t *testing.T) {
 	}
 
 	out := renderStatusSummary(
-		"/etc/cfpick/config.json",
+		"/etc/tunnelflux/config.json",
 		cfg,
-		"/var/lib/cfpick/history.jsonl",
+		"/var/lib/tunnelflux/history.jsonl",
 		"request_rate",
 		"24h",
 		endpoint,

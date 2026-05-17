@@ -16,15 +16,15 @@ import (
 
 	"github.com/guptarohit/asciigraph"
 	prettytable "github.com/jedib0t/go-pretty/v6/table"
-	"github.com/kayphoon/cfpick/internal/cloudflared"
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/daemon"
-	"github.com/kayphoon/cfpick/internal/discover"
-	"github.com/kayphoon/cfpick/internal/history"
-	"github.com/kayphoon/cfpick/internal/hosts"
-	"github.com/kayphoon/cfpick/internal/install"
-	"github.com/kayphoon/cfpick/internal/probe"
-	"github.com/kayphoon/cfpick/internal/slots"
+	"github.com/kayphoon/tunnelflux/internal/cloudflared"
+	"github.com/kayphoon/tunnelflux/internal/config"
+	"github.com/kayphoon/tunnelflux/internal/daemon"
+	"github.com/kayphoon/tunnelflux/internal/discover"
+	"github.com/kayphoon/tunnelflux/internal/history"
+	"github.com/kayphoon/tunnelflux/internal/hosts"
+	"github.com/kayphoon/tunnelflux/internal/install"
+	"github.com/kayphoon/tunnelflux/internal/probe"
+	"github.com/kayphoon/tunnelflux/internal/slots"
 )
 
 var version = "dev"
@@ -110,7 +110,7 @@ func statusCmd(args []string) {
 		latest = &records[len(records)-1]
 	}
 
-	fmt.Printf("cfpick status  %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Printf("tf status  %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(renderStatusSummary(path, cfg, historyPath, *metric, *since, endpoint, ready, readyErr, metrics, metricsErr, records, latest, lang))
 	fmt.Println()
 	fmt.Println(renderEdgesLocalized(conns, edgesErr, lang))
@@ -348,9 +348,6 @@ func resolveConfigPath(explicit string) string {
 	if _, err := os.Stat(config.DefaultConfigPath); err == nil {
 		return config.DefaultConfigPath
 	}
-	if _, err := os.Stat(config.LegacyConfigPath); err == nil {
-		return config.LegacyConfigPath
-	}
 	return config.DefaultConfigPath
 }
 
@@ -360,12 +357,6 @@ func resolveHistoryPath(path string) string {
 	}
 	if _, err := os.Stat(path); err == nil {
 		return path
-	}
-	const legacy = "/var/lib/cfedgepickd/history.jsonl"
-	if path == "/var/lib/cfpick/history.jsonl" {
-		if _, err := os.Stat(legacy); err == nil {
-			return legacy
-		}
 	}
 	return path
 }
@@ -1240,5 +1231,5 @@ func parseWindow(raw string) (time.Duration, error) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cfpick status|run|once|switch|discover|probe|install|version [flags]\n")
+	fmt.Fprintf(os.Stderr, "usage: tf status|run|once|switch|discover|probe|install|version [flags]\n")
 }

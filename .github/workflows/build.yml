@@ -48,12 +48,12 @@ jobs:
         run: make dist VERSION="${{ steps.version.outputs.version }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: cfpick-dist
+          name: tunnelflux-dist
           path: |
-            dist/cfpick-linux-amd64.tar.gz
-            dist/cfpick-linux-arm64.tar.gz
-            dist/cfpick-darwin-amd64.tar.gz
-            dist/cfpick-darwin-arm64.tar.gz
+            dist/tunnelflux-linux-amd64.tar.gz
+            dist/tunnelflux-linux-arm64.tar.gz
+            dist/tunnelflux-darwin-amd64.tar.gz
+            dist/tunnelflux-darwin-arm64.tar.gz
             dist/checksums.txt
             dist/install.sh
           if-no-files-found: error
@@ -68,14 +68,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: cfpick-dist
+          name: tunnelflux-dist
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/cfpick-linux-amd64.tar.gz
-            dist/cfpick-linux-arm64.tar.gz
-            dist/cfpick-darwin-amd64.tar.gz
-            dist/cfpick-darwin-arm64.tar.gz
+            dist/tunnelflux-linux-amd64.tar.gz
+            dist/tunnelflux-linux-arm64.tar.gz
+            dist/tunnelflux-darwin-amd64.tar.gz
+            dist/tunnelflux-darwin-arm64.tar.gz
             dist/checksums.txt
             dist/install.sh

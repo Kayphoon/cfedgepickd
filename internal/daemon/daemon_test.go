@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kayphoon/cfpick/internal/cloudflared"
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/probe"
-	"github.com/kayphoon/cfpick/internal/state"
+	"github.com/kayphoon/tunnelflux/internal/cloudflared"
+	"github.com/kayphoon/tunnelflux/internal/config"
+	"github.com/kayphoon/tunnelflux/internal/probe"
+	"github.com/kayphoon/tunnelflux/internal/state"
 )
 
 func TestIdleStateStartsWindowThenBecomesIdle(t *testing.T) {
