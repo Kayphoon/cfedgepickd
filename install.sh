@@ -3,36 +3,43 @@ set -eu
 
 repo="Kayphoon/cfpick"
 version="latest"
-mode="dry-run"
+mode="apply"
 protocol="auto"
 emergency_rtt_ms="0"
 prefix="/usr/local/bin"
 config="/etc/cfpick/config.json"
 unit="/etc/systemd/system/cfpick.service"
-start_service="false"
+start_service="true"
 enable_service="true"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  install.sh [--dry-run|--apply] [--protocol auto|quic|http2] [options]
+  install.sh [options]
+
+Default behavior:
+  Install the latest release, write the config, enable the service, and start it.
 
 Options:
   --version VERSION   Release tag to install, for example v0.2.13. Default: latest
-  --repo OWNER/REPO   GitHub repository. Default: Kayphoon/cfpick
   --emergency-rtt-ms MS
                      Immediate hot-switch threshold in ms. 0 disables. Default: 0
+  --no-start          Install the service but do not start it
+  --help              Show this help
+
+Advanced options:
+  --dry-run           Preview discovery and planned writes without changing files
+  --protocol MODE     auto, quic, or http2. Default: auto
+  --repo OWNER/REPO   GitHub repository. Default: Kayphoon/cfpick
   --prefix PATH       Binary install directory. Default: /usr/local/bin
   --config PATH       Config path. Default: /etc/cfpick/config.json
   --unit PATH         systemd unit or launchd plist path. Default: platform-specific
-  --start             Start/restart cfpick.service after installing
   --no-enable         Do not enable cfpick.service
-  --help              Show this help
 
 Examples:
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sh -s -- --dry-run
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.13 --start
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --emergency-rtt-ms 100
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --version v0.2.13
 USAGE
 }
 
@@ -48,6 +55,7 @@ while [ "$#" -gt 0 ]; do
     --config) config="$2"; shift ;;
     --unit) unit="$2"; shift ;;
     --start) start_service="true" ;;
+    --no-start) start_service="false" ;;
     --no-enable) enable_service="false" ;;
     --help|-h) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -117,7 +125,7 @@ install_from_dir() {
   fi
 
   if [ "$(id -u)" != "0" ]; then
-    echo "--apply writes to system paths; run as root or use sudo" >&2
+    echo "install writes to system paths; run as root or use sudo" >&2
     exit 1
   fi
 

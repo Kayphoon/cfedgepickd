@@ -38,35 +38,30 @@ Not supported in v1:
 
 ## Install
 
-Dry-run from the latest GitHub Release:
+Install the latest release and start the daemon:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sh -s -- --dry-run
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh
 ```
 
-Install the latest release:
+Enable the 100ms emergency hot-switch threshold during install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto --emergency-rtt-ms 100
-```
-
-Install and start the daemon immediately:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto --start
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --emergency-rtt-ms 100
 ```
 
 Pin a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.13
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --version v0.2.13
 ```
 
 The installer detects Linux/macOS and `amd64`/`arm64`, downloads the matching
 release archive, verifies `checksums.txt` when available, installs the binaries,
-writes `/etc/cfpick/config.json`, and writes the platform service definition. It
-does not start the daemon unless `--start` is passed.
+writes `/etc/cfpick/config.json`, writes the platform service definition, enables
+the daemon, and starts it. Use `--dry-run` only when you want a preview without
+changing the machine, and `--no-start` when you want to install without starting
+the daemon.
 
 ## Commands
 
@@ -76,7 +71,6 @@ cfpick status --lang zh
 cfpick status --metric error_delta --since 24h
 cfpick discover
 cfpick probe --protocol auto
-cfpick install --dry-run --protocol auto
 cfpick once --config /etc/cfpick/config.json
 cfpick switch --config /etc/cfpick/config.json
 cfpick switch --apply --config /etc/cfpick/config.json
@@ -85,9 +79,9 @@ cfpick switch --apply --mode restart --config /etc/cfpick/config.json
 cfpick run --config /etc/cfpick/config.json
 ```
 
-`install --dry-run` only prints discovered config, probe output, and the unit that
-would be installed. `install --apply` writes `/etc/cfpick/config.json` and the
-platform service unit or plist.
+The one-line installer is the normal install path. It writes
+`/etc/cfpick/config.json`, installs the platform service unit or plist, enables
+the daemon, and starts it.
 
 `switch` is the manual replacement command. Without `--apply` it probes and prints
 the planned blue/green switch. With `--apply` it writes the selected IPs, starts
