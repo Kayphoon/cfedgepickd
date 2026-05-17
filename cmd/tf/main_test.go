@@ -229,14 +229,26 @@ func TestRenderStatusSummaryChinese(t *testing.T) {
 }
 
 func TestNormalizeStatusLang(t *testing.T) {
-	if got := normalizeStatusLang("en", true); got != "zh" {
+	if got := normalizeStatusLang("en", true, "en"); got != "zh" {
 		t.Fatalf("zh flag lang=%q", got)
 	}
-	if got := normalizeStatusLang("zh-CN", false); got != "zh" {
+	if got := normalizeStatusLang("zh-CN", false, "en"); got != "zh" {
 		t.Fatalf("zh-CN lang=%q", got)
 	}
-	if got := normalizeStatusLang("unknown", false); got != "en" {
+	if got := normalizeStatusLang("", false, "zh"); got != "zh" {
+		t.Fatalf("config fallback lang=%q", got)
+	}
+	if got := normalizeStatusLang("unknown", false, "zh"); got != "en" {
 		t.Fatalf("fallback lang=%q", got)
+	}
+}
+
+func TestInstallLanguage(t *testing.T) {
+	if got := installLanguage("en", true); got != "zh" {
+		t.Fatalf("zh flag install lang=%q", got)
+	}
+	if got := installLanguage(" zh-CN ", false); got != "zh-CN" {
+		t.Fatalf("install lang should preserve raw value for validation, got %q", got)
 	}
 }
 

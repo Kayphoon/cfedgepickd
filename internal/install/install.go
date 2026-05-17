@@ -30,6 +30,7 @@ type Options struct {
 	Binary                  string
 	UnitPath                string
 	EmergencyRTTThresholdMS float64
+	Language                string
 }
 
 type Report struct {
@@ -52,6 +53,13 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	}
 	if opts.EmergencyRTTThresholdMS != 0 {
 		cfg.Switching.EmergencyRTTThresholdMS = opts.EmergencyRTTThresholdMS
+	}
+	if opts.Language != "" {
+		lang, ok := config.ParseLanguage(opts.Language)
+		if !ok {
+			return Report{Discover: dr, Config: cfg}, fmt.Errorf("runtime.language must be en or zh")
+		}
+		cfg.Runtime.Language = lang
 	}
 	if err := cfg.Validate(); err != nil {
 		return Report{Discover: dr, Config: cfg}, err

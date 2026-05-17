@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,9 @@ const (
 
 	SwitchStrategyHot     = "hot"
 	SwitchStrategyRestart = "restart"
+
+	LanguageEN = "en"
+	LanguageZH = "zh"
 
 	CloudflaredQUICServerName = "quic.cftunnel.com"
 
@@ -103,8 +107,27 @@ type RuntimeConfig struct {
 	HistoryFile          string `json:"history_file"`
 	SlotsFile            string `json:"slots_file"`
 	HistoryRetentionDays int    `json:"history_retention_days"`
+	Language             string `json:"language"`
 	LogLevel             string `json:"log_level"`
 	DryRun               bool   `json:"dry_run"`
+}
+
+func ParseLanguage(raw string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", LanguageEN, "en-us", "english":
+		return LanguageEN, true
+	case LanguageZH, "zh-cn", "cn", "chinese":
+		return LanguageZH, true
+	default:
+		return "", false
+	}
+}
+
+func NormalizeLanguage(raw string) string {
+	if lang, ok := ParseLanguage(raw); ok {
+		return lang
+	}
+	return LanguageEN
 }
 
 func DefaultUnitPath() string {
@@ -179,6 +202,7 @@ func Default() Config {
 			HistoryFile:          historyFile,
 			SlotsFile:            slotsFile,
 			HistoryRetentionDays: 30,
+			Language:             LanguageEN,
 			LogLevel:             "info",
 			DryRun:               true,
 		},
@@ -313,6 +337,9 @@ func (c Config) WithDefaults() Config {
 	if c.Runtime.HistoryRetentionDays == 0 {
 		c.Runtime.HistoryRetentionDays = def.Runtime.HistoryRetentionDays
 	}
+	if lang, ok := ParseLanguage(c.Runtime.Language); ok {
+		c.Runtime.Language = lang
+	}
 	if c.Runtime.LogLevel == "" {
 		c.Runtime.LogLevel = def.Runtime.LogLevel
 	}
@@ -350,6 +377,9 @@ func (c Config) Validate() error {
 	}
 	if c.Switching.EmergencyRTTThresholdMS < 0 {
 		return errors.New("switching.emergency_rtt_threshold_ms must be >= 0")
+	}
+	if _, ok := ParseLanguage(c.Runtime.Language); !ok {
+		return errors.New("runtime.language must be en or zh")
 	}
 	return nil
 }

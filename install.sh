@@ -6,6 +6,7 @@ version="latest"
 mode="apply"
 protocol="auto"
 emergency_rtt_ms="0"
+language=""
 prefix="/usr/local/bin"
 config="/etc/tunnelflux/config.json"
 unit="/etc/systemd/system/tunnelflux.service"
@@ -24,6 +25,8 @@ Options:
   --version VERSION   Release tag to install, for example v0.2.13. Default: latest
   --emergency-rtt-ms MS
                      Immediate hot-switch threshold in ms. 0 disables. Default: 0
+  --lang LANG        Default status language: en or zh. Default: en
+  --zh               Shortcut for --lang zh
   --no-start          Install the service but do not start it
   --help              Show this help
 
@@ -38,6 +41,7 @@ Advanced options:
 
 Examples:
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --zh
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --emergency-rtt-ms 100
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --version v0.2.13
 USAGE
@@ -49,6 +53,8 @@ while [ "$#" -gt 0 ]; do
     --apply) mode="apply" ;;
     --protocol) protocol="$2"; shift ;;
     --emergency-rtt-ms) emergency_rtt_ms="$2"; shift ;;
+    --lang) language="$2"; shift ;;
+    --zh) language="zh" ;;
     --repo) repo="$2"; shift ;;
     --version) version="$2"; shift ;;
     --prefix) prefix="$2"; shift ;;
@@ -119,8 +125,18 @@ install_from_dir() {
     exit 1
   fi
 
+  run_tf_install() {
+    tf_bin="$1"
+    shift
+    if [ -n "$language" ]; then
+      "$tf_bin" install "$@" --lang "$language"
+    else
+      "$tf_bin" install "$@"
+    fi
+  }
+
   if [ "$mode" = "dry-run" ]; then
-    "$package_dir/tf" install --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/tf" --unit "$unit"
+    run_tf_install "$package_dir/tf" --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/tf" --unit "$unit"
     exit 0
   fi
 
@@ -131,7 +147,7 @@ install_from_dir() {
 
   install -m 0755 "$package_dir/tf" "$prefix/tf"
 
-  "$prefix/tf" install --apply --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/tf" --unit "$unit"
+  run_tf_install "$prefix/tf" --apply --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/tf" --unit "$unit"
 
   if [ "$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
     unit_name="$(basename "$unit")"
@@ -155,12 +171,24 @@ install_from_dir() {
     fi
   fi
 
-  echo "installed TunnelFlux; inspect with: tf status"
+  if [ "$language" = "zh" ]; then
+    echo "TunnelFlux 已安装；查看状态: tf status"
+  else
+    echo "installed TunnelFlux; inspect with: tf status"
+  fi
   if [ "$start_service" != "true" ]; then
     if [ "$(uname -s)" = "Darwin" ]; then
-      echo "start with: launchctl kickstart -k system/$(basename "$unit" .plist)"
+      if [ "$language" = "zh" ]; then
+        echo "启动命令: launchctl kickstart -k system/$(basename "$unit" .plist)"
+      else
+        echo "start with: launchctl kickstart -k system/$(basename "$unit" .plist)"
+      fi
     else
-      echo "start with: systemctl start $(basename "$unit")"
+      if [ "$language" = "zh" ]; then
+        echo "启动命令: systemctl start $(basename "$unit")"
+      else
+        echo "start with: systemctl start $(basename "$unit")"
+      fi
     fi
   fi
 }

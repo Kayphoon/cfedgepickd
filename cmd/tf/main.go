@@ -64,16 +64,16 @@ func statusCmd(args []string) {
 	since := fs.String("since", "24h", "history window, for example 24h or 7d")
 	width := fs.Int("width", 80, "graph width")
 	height := fs.Int("height", 12, "graph height")
-	langFlag := fs.String("lang", "en", "status language: en or zh")
+	langFlag := fs.String("lang", "", "status language: en or zh; defaults to runtime.language")
 	zhFlag := fs.Bool("zh", false, "shortcut for --lang zh")
 	_ = fs.Parse(args)
-	lang := normalizeStatusLang(*langFlag, *zhFlag)
 
 	path := resolveConfigPath(*configPath)
 	cfg, err := config.Load(path)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	lang := normalizeStatusLang(*langFlag, *zhFlag, cfg.Runtime.Language)
 	window, err := parseWindow(*since)
 	if err != nil {
 		log.Fatalf("invalid --since: %v", err)
@@ -321,9 +321,17 @@ func installCmd(args []string) {
 	binary := fs.String("binary", config.DefaultBinaryPath, "binary path in systemd unit")
 	unit := fs.String("unit", config.DefaultUnitPath(), "target service unit/plist path")
 	emergencyRTTMS := fs.Float64("emergency-rtt-ms", 0, "immediate hot-switch threshold in ms; 0 disables")
+	langFlag := fs.String("lang", "", "default status language: en or zh")
+	zhFlag := fs.Bool("zh", false, "shortcut for --lang zh")
 	pretty := fs.Bool("pretty", true, "pretty JSON")
 	_ = fs.Parse(args)
 	applyMode := *apply && !*dryRun
+	language := installLanguage(*langFlag, *zhFlag)
+	if language != "" {
+		if _, ok := config.ParseLanguage(language); !ok {
+			log.Fatalf("invalid --lang: %s", language)
+		}
+	}
 	rep, err := install.Run(context.Background(), install.Options{
 		Apply:                   applyMode,
 		Protocol:                *protocol,
@@ -331,6 +339,7 @@ func installCmd(args []string) {
 		Binary:                  *binary,
 		UnitPath:                *unit,
 		EmergencyRTTThresholdMS: *emergencyRTTMS,
+		Language:                language,
 	})
 	if err != nil {
 		log.Printf("install completed with probe warning/error: %v", err)
@@ -866,16 +875,21 @@ func renderTable(title string, header []interface{}, rows []prettytable.Row) str
 	return t.Render()
 }
 
-func normalizeStatusLang(raw string, zh bool) string {
+func normalizeStatusLang(raw string, zh bool, fallback string) string {
 	if zh {
-		return "zh"
+		return config.LanguageZH
 	}
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "zh", "zh-cn", "cn", "chinese":
-		return "zh"
-	default:
-		return "en"
+	if strings.TrimSpace(raw) != "" {
+		return config.NormalizeLanguage(raw)
 	}
+	return config.NormalizeLanguage(fallback)
+}
+
+func installLanguage(raw string, zh bool) string {
+	if zh {
+		return config.LanguageZH
+	}
+	return strings.TrimSpace(raw)
 }
 
 func tr(lang, key string) string {
