@@ -186,6 +186,60 @@ func TestRenderSlotsUsesResolvedActiveEndpoint(t *testing.T) {
 	}
 }
 
+func TestRenderStatusSummaryChinese(t *testing.T) {
+	cfg := config.Default()
+	cfg.Switching.EmergencyRTTThresholdMS = 100
+	endpoint := slots.ActiveEndpoint{
+		Slot:       slots.DefaultState(cfg).Green,
+		State:      slots.DefaultState(cfg),
+		MetricsURL: cfg.Cloudflared.MetricsURL,
+		ReadyURL:   cfg.Cloudflared.ReadyURL,
+		Source:     "slots.active",
+	}
+	latest := history.Record{
+		Time:              time.Unix(200, 0),
+		EffectiveProtocol: config.ProtocolQUIC,
+		TopIP:             "198.41.1.1",
+		TopMedianMS:       4,
+		ReadyConnections:  2,
+		HAConnections:     2,
+		TotalRequests:     100,
+	}
+
+	out := renderStatusSummary(
+		"/etc/cfpick/config.json",
+		cfg,
+		"/var/lib/cfpick/history.jsonl",
+		"request_rate",
+		"24h",
+		endpoint,
+		cloudflared.Ready{ReadyConnections: 2, ConnectorID: "abc"},
+		nil,
+		cloudflared.Metrics{HAConnections: 2, TotalRequests: 100},
+		nil,
+		nil,
+		&latest,
+		"zh",
+	)
+	for _, want := range []string{"状态总览", "配置", "应急 RTT", "当前槽位", "最近采样"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("summary missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestNormalizeStatusLang(t *testing.T) {
+	if got := normalizeStatusLang("en", true); got != "zh" {
+		t.Fatalf("zh flag lang=%q", got)
+	}
+	if got := normalizeStatusLang("zh-CN", false); got != "zh" {
+		t.Fatalf("zh-CN lang=%q", got)
+	}
+	if got := normalizeStatusLang("unknown", false); got != "en" {
+		t.Fatalf("fallback lang=%q", got)
+	}
+}
+
 func TestPerformanceFromHistory(t *testing.T) {
 	now := time.Unix(200, 0)
 	records := []history.Record{

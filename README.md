@@ -72,6 +72,7 @@ does not start the daemon unless `--start` is passed.
 
 ```bash
 cfpick status
+cfpick status --lang zh
 cfpick status --metric error_delta --since 24h
 cfpick discover
 cfpick probe --protocol auto
@@ -106,10 +107,10 @@ History retention defaults to 30 days through `runtime.history_retention_days`.
 Records older than that are pruned after each successful append. Set the value to
 a negative number to disable pruning.
 
-Use `cfpick status` to show a terminal dashboard. It renders current health,
-cloudflared performance, active edge sockets, the latest sample, and a time-ordered
-line chart. The default chart overlays request rate and error rate with different
-colors:
+Use `cfpick status` to show a terminal dashboard. It renders a unified status
+summary, active edge sockets, edge comparison, latest decision state, and a
+time-ordered line chart. The default chart overlays request rate and error rate
+with different colors. Use `--lang zh` or `--zh` for Chinese labels:
 
 ```bash
 cfpick status --metric request_rate --since 24h
