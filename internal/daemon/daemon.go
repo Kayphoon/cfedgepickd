@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/kayphoon/cfpick/internal/cloudflared"
@@ -20,6 +21,7 @@ type Decision struct {
 	Protocol     string              `json:"protocol"`
 	TopIPs       []string            `json:"top_ips"`
 	CurrentIPs   []string            `json:"current_ips"`
+	Forced       bool                `json:"forced,omitempty"`
 	Idle         bool                `json:"idle"`
 	DegradedRaw  bool                `json:"degraded_raw"`
 	Degraded     bool                `json:"degraded"`
@@ -125,6 +127,112 @@ func Once(ctx context.Context, cfg config.Config, apply bool) (Decision, *switch
 	_ = appendHistory(cfg, decision, sw, "")
 	_ = state.Save(cfg.Runtime.StateFile, st)
 	return decision, sw, nil
+}
+
+func SwitchNow(ctx context.Context, cfg config.Config, ips []string, apply bool) (Decision, *switcher.Result, error) {
+	cfg = cfg.WithDefaults()
+	st, _ := state.Load(cfg.Runtime.StateFile)
+	metrics, metricsErr := cloudflared.FetchMetrics(ctx, cfg.Cloudflared.MetricsURL)
+	ready, readyErr := cloudflared.FetchReady(ctx, cfg.Cloudflared.ReadyURL)
+	conns, _ := cloudflared.CurrentEdges(ctx, cfg.Edge.Port)
+	currentIPs := edgeIPs(conns)
+
+	var pr probe.Report
+	var err error
+	if len(ips) > 0 {
+		pr = manualProbeReport(ips, cfg.Cloudflared.Protocol)
+	} else {
+		pr, err = probe.Run(ctx, cfg, probe.Mode(cfg.Cloudflared.Protocol))
+		if err != nil {
+			return Decision{}, nil, err
+		}
+		ips = topIPs(pr.Top)
+	}
+	if len(ips) == 0 {
+		return Decision{}, nil, fmt.Errorf("no IPs selected for switch")
+	}
+
+	reason := "manual switch requested"
+	if metricsErr != nil || readyErr != nil {
+		var notes []string
+		if metricsErr != nil {
+			notes = append(notes, "metrics unavailable: "+metricsErr.Error())
+		}
+		if readyErr != nil {
+			notes = append(notes, "ready unavailable: "+readyErr.Error())
+		}
+		reason += " (" + strings.Join(notes, "; ") + ")"
+	}
+
+	effectiveProtocol := pr.EffectiveProtocol
+	if effectiveProtocol == "" {
+		effectiveProtocol = cfg.Cloudflared.Protocol
+	}
+	if effectiveProtocol == "" {
+		effectiveProtocol = config.ProtocolAuto
+	}
+	decision := Decision{
+		Protocol:     effectiveProtocol,
+		TopIPs:       ips,
+		CurrentIPs:   currentIPs,
+		Forced:       true,
+		Idle:         true,
+		DegradedRaw:  true,
+		Degraded:     true,
+		DegradedRun:  cfg.Switching.DegradedRounds,
+		InCooldown:   false,
+		ShouldSwitch: true,
+		Reason:       reason,
+		Metrics:      metrics,
+		Ready:        ready,
+		Probe:        pr,
+	}
+
+	cfg.Runtime.DryRun = !apply
+	appliedProtocol := protocolForCloudflaredConfig(cfg, pr)
+	res, switchErr := switcher.Apply(ctx, cfg, ips, appliedProtocol)
+	sw := &res
+	if apply {
+		st.LastSwitchAt = time.Now()
+		st.LastSwitchOK = switchErr == nil
+		st.LastProtocol = appliedProtocol
+	}
+	st.LastProbeAt = time.Now()
+	st.CurrentIPs = currentIPs
+	st.PendingIPs = ips
+	st.LastTotalRequests = metrics.TotalRequests
+	st.LastRequestErrors = metrics.RequestErrors
+	st.DegradedStreak = cfg.Switching.DegradedRounds
+
+	switchErrText := ""
+	if switchErr != nil {
+		switchErrText = switchErr.Error()
+	}
+	_ = appendHistory(cfg, decision, sw, switchErrText)
+	_ = state.Save(cfg.Runtime.StateFile, st)
+	return decision, sw, switchErr
+}
+
+func manualProbeReport(ips []string, protocol string) probe.Report {
+	if protocol == "" {
+		protocol = config.ProtocolAuto
+	}
+	when := time.Now().UTC()
+	results := make([]probe.Result, 0, len(ips))
+	for _, ip := range ips {
+		results = append(results, probe.Result{
+			IP:       ip,
+			Protocol: protocol,
+			When:     when,
+		})
+	}
+	return probe.Report{
+		Mode:              protocol,
+		EffectiveProtocol: protocol,
+		Candidates:        len(ips),
+		Results:           results,
+		Top:               results,
+	}
 }
 
 func appendHistory(cfg config.Config, decision Decision, sw *switcher.Result, switchErr string) error {

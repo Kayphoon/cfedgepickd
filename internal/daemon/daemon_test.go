@@ -74,3 +74,13 @@ func TestCurrentProbeSamplesPreserveCurrentOrder(t *testing.T) {
 		t.Fatalf("missing probe sample=%+v", got[2])
 	}
 }
+
+func TestManualProbeReportUsesProvidedIPs(t *testing.T) {
+	rep := manualProbeReport([]string{"198.41.1.1", "198.41.1.2"}, config.ProtocolAuto)
+	if rep.EffectiveProtocol != config.ProtocolAuto || rep.Candidates != 2 {
+		t.Fatalf("unexpected report metadata: %+v", rep)
+	}
+	if len(rep.Top) != 2 || rep.Top[0].IP != "198.41.1.1" || rep.Top[1].IP != "198.41.1.2" {
+		t.Fatalf("unexpected top IPs: %+v", rep.Top)
+	}
+}

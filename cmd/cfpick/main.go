@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -38,6 +39,8 @@ func main() {
 		runCmd(os.Args[2:])
 	case "once":
 		onceCmd(os.Args[2:])
+	case "switch":
+		switchCmd(os.Args[2:])
 	case "discover":
 		discoverCmd(os.Args[2:])
 	case "probe":
@@ -181,6 +184,74 @@ func onceCmd(args []string) {
 		log.Fatalf("once failed: %v", err)
 	}
 	daemon.PrintDecision(decision, sw)
+}
+
+func switchCmd(args []string) {
+	fs := flag.NewFlagSet("switch", flag.ExitOnError)
+	configPath := fs.String("config", resolveConfigPath(""), "config file")
+	apply := fs.Bool("apply", false, "update hosts/config and restart cloudflared")
+	mode := fs.String("protocol", "", "auto, quic, or http2")
+	top := fs.Int("top", 0, "override top_n when probing")
+	ipsRaw := fs.String("ips", "", "comma or space separated IPs to apply; skips probing")
+	_ = fs.Parse(args)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+	if *top > 0 {
+		cfg.Edge.TopN = *top
+	}
+	if *mode != "" {
+		cfg.Cloudflared.Protocol = *mode
+	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("invalid config: %v", err)
+	}
+	ips, err := parseSwitchIPs(*ipsRaw)
+	if err != nil {
+		log.Fatalf("invalid --ips: %v", err)
+	}
+	if !*apply {
+		cfg.Runtime.DryRun = true
+	}
+	decision, sw, err := daemon.SwitchNow(context.Background(), cfg, ips, *apply)
+	if err != nil {
+		daemon.PrintDecision(decision, sw)
+		log.Fatalf("switch failed: %v", err)
+	}
+	daemon.PrintDecision(decision, sw)
+}
+
+func parseSwitchIPs(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\t' || r == '\n'
+	})
+	seen := map[string]bool{}
+	var ips []string
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		addr, err := netip.ParseAddr(part)
+		if err != nil {
+			return nil, err
+		}
+		ip := addr.String()
+		if !seen[ip] {
+			seen[ip] = true
+			ips = append(ips, ip)
+		}
+	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no valid IPs")
+	}
+	return ips, nil
 }
 
 func discoverCmd(args []string) {
@@ -836,5 +907,5 @@ func parseWindow(raw string) (time.Duration, error) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cfpick status|run|once|discover|probe|install|version [flags]\n")
+	fmt.Fprintf(os.Stderr, "usage: cfpick status|run|once|switch|discover|probe|install|version [flags]\n")
 }

@@ -40,6 +40,22 @@ func TestParseWindowRejectsNonPositive(t *testing.T) {
 	}
 }
 
+func TestParseSwitchIPsDeduplicatesAndNormalizes(t *testing.T) {
+	got, err := parseSwitchIPs("198.41.1.1, 198.41.1.2 198.41.1.1")
+	if err != nil {
+		t.Fatalf("parseSwitchIPs returned error: %v", err)
+	}
+	if len(got) != 2 || got[0] != "198.41.1.1" || got[1] != "198.41.1.2" {
+		t.Fatalf("unexpected IPs: %+v", got)
+	}
+}
+
+func TestParseSwitchIPsRejectsInvalidIP(t *testing.T) {
+	if _, err := parseSwitchIPs("198.41.1.1,not-an-ip"); err == nil {
+		t.Fatal("expected invalid IP error")
+	}
+}
+
 func TestEdgeRemotesDeduplicates(t *testing.T) {
 	got := edgeRemotes([]cloudflared.EdgeConnection{
 		{Remote: "198.41.1.1:7844"},

@@ -58,7 +58,7 @@ curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | s
 Pin a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.9
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.10
 ```
 
 The installer detects `linux/amd64` and `linux/arm64`, downloads the matching
@@ -75,12 +75,21 @@ cfpick discover
 cfpick probe --protocol auto
 cfpick install --dry-run --protocol auto
 cfpick once --config /etc/cfpick/config.json
+cfpick switch --config /etc/cfpick/config.json
+cfpick switch --apply --config /etc/cfpick/config.json
+cfpick switch --apply --ips 198.41.200.227,198.41.200.132 --config /etc/cfpick/config.json
 cfpick run --config /etc/cfpick/config.json
 ```
 
 `install --dry-run` only prints discovered config, probe output, and the unit that
 would be installed. `install --apply` writes `/etc/cfpick/config.json` and the
 `cfpick.service` systemd unit.
+
+`switch` is the manual replacement command. Without `--apply` it probes and prints
+the planned host mappings. With `--apply` it immediately writes the selected IPs,
+restarts `cloudflared`, waits for `readyConnections >= 2`, and rolls back if the
+restart does not become healthy. Passing `--ips` skips probing and applies those
+IPs directly.
 
 ## History And Graphs
 
@@ -117,7 +126,7 @@ Supported metrics include `request_rate`, `request_delta`, `error_rate`,
 
 ```bash
 make test
-make dist VERSION=v0.2.9
+make dist VERSION=v0.2.10
 ```
 
 `make dist` builds static Linux binaries for `linux/amd64` and `linux/arm64`:
@@ -140,8 +149,8 @@ creates a GitHub Release and uploads the two Linux archives, `checksums.txt`,
 and `install.sh`:
 
 ```bash
-git tag v0.2.9
-git push origin v0.2.9
+git tag v0.2.10
+git push origin v0.2.10
 ```
 
 Tag builds embed the tag name in `cfpick version`, `cfedgepickd version`, and
@@ -158,6 +167,8 @@ The daemon only switches when:
 - and the configured idle window is satisfied.
 
 Emergency switching can bypass the idle requirement when `readyConnections < 2`.
+Manual `cfpick switch --apply` intentionally bypasses degraded, cooldown, and idle
+gates because it is an explicit operator action.
 
 All hosts/config writes are backed up before restart. If `cloudflared` does not reach
 `readyConnections >= 2` before timeout, the daemon restores the backup and restarts
