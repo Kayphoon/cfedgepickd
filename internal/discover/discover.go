@@ -122,17 +122,32 @@ func findCloudflaredService(ctx context.Context, systemctl string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	sc := bufio.NewScanner(strings.NewReader(string(out)))
+	if service := pickCloudflaredService(string(out)); service != "" {
+		return service, nil
+	}
+	return "cloudflared.service", nil
+}
+
+func pickCloudflaredService(units string) string {
+	sc := bufio.NewScanner(strings.NewReader(units))
+	var fallback string
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
 		if len(fields) == 0 {
 			continue
 		}
-		if strings.Contains(fields[0], "cloudflared") {
-			return strings.TrimSpace(fields[0]), nil
+		name := strings.TrimSpace(fields[0])
+		if name == "cloudflared.service" {
+			return name
+		}
+		if strings.HasPrefix(name, "cfpick-cloudflared-") {
+			continue
+		}
+		if fallback == "" && strings.Contains(name, "cloudflared") {
+			fallback = name
 		}
 	}
-	return "cloudflared.service", nil
+	return fallback
 }
 
 func systemctlCat(ctx context.Context, systemctl, service string) (string, error) {
