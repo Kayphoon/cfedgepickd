@@ -11,6 +11,8 @@ config="/etc/cfpick/config.json"
 unit="/etc/systemd/system/cfpick.service"
 start_service="false"
 enable_service="true"
+force_download="false"
+binaries_only="false"
 
 usage() {
   cat <<'USAGE'
@@ -27,12 +29,15 @@ Options:
   --unit PATH         systemd unit or launchd plist path. Default: platform-specific
   --start             Start/restart cfpick.service after installing
   --no-enable         Do not enable cfpick.service
+  --force-download    Download the release archive even when run beside cfpick
+  --binaries-only     Install binaries and helper without rewriting config/unit
   --help              Show this help
 
 Examples:
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sh -s -- --dry-run
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --protocol auto
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --apply --version v0.2.13 --start
+  sudo cfpick update
 USAGE
 }
 
@@ -49,11 +54,18 @@ while [ "$#" -gt 0 ]; do
     --unit) unit="$2"; shift ;;
     --start) start_service="true" ;;
     --no-enable) enable_service="false" ;;
+    --force-download) force_download="true" ;;
+    --binaries-only) binaries_only="true" ;;
     --help|-h) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
+
+case "$protocol" in
+  auto|quic|http2) ;;
+  *) echo "invalid --protocol: $protocol" >&2; exit 2 ;;
+esac
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -62,18 +74,20 @@ need_cmd() {
   fi
 }
 
+normalize_unit_for_platform() {
+  if [ "$(uname -s)" = "Darwin" ] && [ "$unit" = "/etc/systemd/system/cfpick.service" ]; then
+    unit="/Library/LaunchDaemons/com.kayphoon.cfpick.plist"
+  fi
+}
+
 detect_arch() {
   os_name="linux"
   case "$(uname -s)" in
     Linux) os_name="linux" ;;
-    Darwin)
-      os_name="darwin"
-      if [ "$unit" = "/etc/systemd/system/cfpick.service" ]; then
-        unit="/Library/LaunchDaemons/com.kayphoon.cfpick.plist"
-      fi
-      ;;
+    Darwin) os_name="darwin" ;;
     *) echo "unsupported OS: $(uname -s); cfpick installer supports Linux and macOS" >&2; exit 1 ;;
   esac
+  normalize_unit_for_platform
   case "$(uname -m)" in
     x86_64|amd64) echo "$os_name-amd64" ;;
     aarch64|arm64) echo "$os_name-arm64" ;;
@@ -128,12 +142,17 @@ install_from_dir() {
   if [ -f "$package_dir/cfedgepickctl" ]; then
     install -m 0755 "$package_dir/cfedgepickctl" "$prefix/cfedgepickctl"
   fi
+  if [ -f "$package_dir/install.sh" ]; then
+    install -m 0755 "$package_dir/install.sh" "$prefix/cfpick-install"
+  fi
 
-  "$prefix/cfpick" install --apply --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
+  if [ "$binaries_only" != "true" ]; then
+    "$prefix/cfpick" install --apply --protocol "$protocol" --emergency-rtt-ms "$emergency_rtt_ms" --config "$config" --binary "$prefix/cfpick" --unit "$unit"
+  fi
 
   if [ "$(uname -s)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
     unit_name="$(basename "$unit")"
-    if [ "$enable_service" = "true" ]; then
+    if [ "$enable_service" = "true" ] && [ "$binaries_only" != "true" ]; then
       systemctl enable "$unit_name"
     fi
     if [ "$start_service" = "true" ]; then
@@ -145,7 +164,7 @@ install_from_dir() {
     fi
   elif [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
     label="$(basename "$unit" .plist)"
-    if [ "$enable_service" = "true" ]; then
+    if [ "$enable_service" = "true" ] && [ "$binaries_only" != "true" ]; then
       launchctl bootstrap system "$unit" 2>/dev/null || true
     fi
     if [ "$start_service" = "true" ]; then
@@ -164,7 +183,8 @@ install_from_dir() {
 }
 
 script_dir="$(CDPATH= cd "$(dirname "$0")" && pwd)"
-if [ -x "$script_dir/cfpick" ]; then
+normalize_unit_for_platform
+if [ "$force_download" != "true" ] && [ -x "$script_dir/cfpick" ]; then
   install_from_dir "$script_dir"
 fi
 

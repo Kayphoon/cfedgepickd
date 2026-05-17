@@ -10,6 +10,8 @@ import (
 	"math"
 	"net/netip"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +51,8 @@ func main() {
 		probeCmd(os.Args[2:])
 	case "install":
 		installCmd(os.Args[2:])
+	case "update":
+		updateCmd(os.Args[2:])
 	case "version":
 		fmt.Println(version)
 	default:
@@ -339,6 +343,87 @@ func installCmd(args []string) {
 	if err != nil && applyMode {
 		os.Exit(1)
 	}
+}
+
+type updateOptions struct {
+	Installer string
+	Repo      string
+	Prefix    string
+	UnitPath  string
+	Restart   bool
+}
+
+func updateCmd(args []string) {
+	defaultPrefix := defaultUpdatePrefix()
+	fs := flag.NewFlagSet("update", flag.ExitOnError)
+	installerPath := fs.String("installer", "", "installer helper path")
+	repo := fs.String("repo", "Kayphoon/cfpick", "GitHub repository")
+	prefix := fs.String("prefix", defaultPrefix, "binary install directory")
+	unit := fs.String("unit", config.DefaultUnitPath(), "target service unit/plist path")
+	noRestart := fs.Bool("no-restart", false, "do not start/restart cfpick service after updating")
+	_ = fs.Parse(args)
+
+	opts := updateOptions{
+		Installer: *installerPath,
+		Repo:      *repo,
+		Prefix:    *prefix,
+		UnitPath:  *unit,
+		Restart:   !*noRestart,
+	}
+	if opts.Installer == "" {
+		opts.Installer = defaultInstallerPath(opts.Prefix)
+	}
+	if _, err := os.Stat(opts.Installer); err != nil {
+		log.Fatalf("update helper not found at %s: %v\nreinstall once with the latest install.sh so cfpick-install is available", opts.Installer, err)
+	}
+
+	cmd := exec.Command(opts.Installer, buildUpdateArgs(opts)...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("update failed: %v", err)
+	}
+}
+
+func defaultUpdatePrefix() string {
+	exe, err := os.Executable()
+	if err == nil && exe != "" {
+		return filepath.Dir(exe)
+	}
+	return filepath.Dir(config.DefaultBinaryPath)
+}
+
+func defaultInstallerPath(prefix string) string {
+	if prefix == "" {
+		prefix = defaultUpdatePrefix()
+	}
+	return filepath.Join(prefix, "cfpick-install")
+}
+
+func buildUpdateArgs(opts updateOptions) []string {
+	if opts.Repo == "" {
+		opts.Repo = "Kayphoon/cfpick"
+	}
+	if opts.Prefix == "" {
+		opts.Prefix = defaultUpdatePrefix()
+	}
+	if opts.UnitPath == "" {
+		opts.UnitPath = config.DefaultUnitPath()
+	}
+	args := []string{
+		"--apply",
+		"--repo", opts.Repo,
+		"--version", "latest",
+		"--force-download",
+		"--binaries-only",
+		"--prefix", opts.Prefix,
+		"--unit", opts.UnitPath,
+	}
+	if opts.Restart {
+		args = append(args, "--start")
+	}
+	return args
 }
 
 func resolveConfigPath(explicit string) string {
@@ -1240,5 +1325,5 @@ func parseWindow(raw string) (time.Duration, error) {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cfpick status|run|once|switch|discover|probe|install|version [flags]\n")
+	fmt.Fprintf(os.Stderr, "usage: cfpick status|run|once|switch|discover|probe|install|update|version [flags]\n")
 }

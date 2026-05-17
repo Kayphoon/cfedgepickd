@@ -68,6 +68,18 @@ release archive, verifies `checksums.txt` when available, installs the binaries,
 writes `/etc/cfpick/config.json`, and writes the platform service definition. It
 does not start the daemon unless `--start` is passed.
 
+The installer also writes a helper at `/usr/local/bin/cfpick-install` when using
+the default prefix. To update later, run:
+
+```bash
+sudo cfpick update
+```
+
+`cfpick update` always downloads the latest GitHub Release, verifies
+`checksums.txt` when available, refreshes the binaries and helper, and restarts
+the service by default. Use `cfpick update --no-restart` when you only want to
+replace files and restart manually.
+
 ## Commands
 
 ```bash
@@ -77,6 +89,7 @@ cfpick status --metric error_delta --since 24h
 cfpick discover
 cfpick probe --protocol auto
 cfpick install --dry-run --protocol auto
+cfpick update
 cfpick once --config /etc/cfpick/config.json
 cfpick switch --config /etc/cfpick/config.json
 cfpick switch --apply --config /etc/cfpick/config.json

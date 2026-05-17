@@ -58,6 +58,39 @@ func TestParseSwitchIPsRejectsInvalidIP(t *testing.T) {
 	}
 }
 
+func TestBuildUpdateArgsPullsLatestWithoutRewritingConfig(t *testing.T) {
+	args := strings.Join(buildUpdateArgs(updateOptions{
+		Repo:     "Owner/repo",
+		Prefix:   "/opt/cfpick/bin",
+		UnitPath: "/etc/systemd/system/cfpick.service",
+		Restart:  true,
+	}), " ")
+
+	for _, want := range []string{
+		"--apply",
+		"--repo Owner/repo",
+		"--version latest",
+		"--force-download",
+		"--binaries-only",
+		"--prefix /opt/cfpick/bin",
+		"--unit /etc/systemd/system/cfpick.service",
+		"--start",
+	} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("update args missing %q: %s", want, args)
+		}
+	}
+}
+
+func TestBuildUpdateArgsCanSkipRestart(t *testing.T) {
+	args := buildUpdateArgs(updateOptions{Restart: false})
+	for _, arg := range args {
+		if arg == "--start" {
+			t.Fatalf("update args should skip restart: %+v", args)
+		}
+	}
+}
+
 func TestEdgeRemotesDeduplicates(t *testing.T) {
 	got := edgeRemotes([]cloudflared.EdgeConnection{
 		{Remote: "198.41.1.1:7844"},
