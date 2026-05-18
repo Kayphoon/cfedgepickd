@@ -1,7 +1,7 @@
-# cfpick
+# TunnelFlux
 
-`cfpick` is a small control-plane daemon and CLI for `cloudflared` Tunnel edge IP
-selection.
+TunnelFlux is a small control-plane daemon and CLI for `cloudflared` Tunnel edge
+IP selection.
 
 It does not proxy traffic. It probes Cloudflare edge candidates, observes `cloudflared`
 health and idle windows, updates `/etc/hosts`, hot-switches between blue/green
@@ -26,7 +26,7 @@ Cloudflare Tunnel QUIC edge presents a Cloudflare Origin certificate. The probe
 therefore validates the expected `argotunnel` ALPN and Cloudflare Origin certificate
 shape instead of requiring a public-web CA chain.
 
-When configured with `protocol: auto`, `cfpick` may use QUIC probes to rank IPs,
+When configured with `protocol: auto`, `tunnelflux` may use QUIC probes to rank IPs,
 but it keeps `cloudflared` configured as `auto` so production traffic can fall back to
 HTTP/2 if UDP/QUIC breaks later.
 
@@ -41,24 +41,24 @@ Not supported in v1:
 Install the latest release and start the daemon:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh
 ```
 
 Enable the 100ms emergency hot-switch threshold during install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --emergency-rtt-ms 100
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --emergency-rtt-ms 100
 ```
 
 Pin a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/cfpick/main/install.sh | sudo sh -s -- --version v0.2.13
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --version v0.2.16
 ```
 
 The installer detects Linux/macOS and `amd64`/`arm64`, downloads the matching
 release archive, verifies `checksums.txt` when available, installs the binaries,
-writes `/etc/cfpick/config.json`, writes the platform service definition, enables
+writes `/etc/tunnelflux/config.json`, writes the platform service definition, enables
 the daemon, and starts it. Use `--dry-run` only when you want a preview without
 changing the machine, and `--no-start` when you want to install without starting
 the daemon.
@@ -66,21 +66,21 @@ the daemon.
 ## Commands
 
 ```bash
-cfpick status
-cfpick status --lang zh
-cfpick status --metric error_delta --since 24h
-cfpick discover
-cfpick probe --protocol auto
-cfpick once --config /etc/cfpick/config.json
-cfpick switch --config /etc/cfpick/config.json
-cfpick switch --apply --config /etc/cfpick/config.json
-cfpick switch --apply --ips 198.41.200.227,198.41.200.132 --config /etc/cfpick/config.json
-cfpick switch --apply --mode restart --config /etc/cfpick/config.json
-cfpick run --config /etc/cfpick/config.json
+tunnelflux status
+tunnelflux status --lang zh
+tunnelflux status --metric error_delta --since 24h
+tunnelflux discover
+tunnelflux probe --protocol auto
+tunnelflux once --config /etc/tunnelflux/config.json
+tunnelflux switch --config /etc/tunnelflux/config.json
+tunnelflux switch --apply --config /etc/tunnelflux/config.json
+tunnelflux switch --apply --ips 198.41.200.227,198.41.200.132 --config /etc/tunnelflux/config.json
+tunnelflux switch --apply --mode restart --config /etc/tunnelflux/config.json
+tunnelflux run --config /etc/tunnelflux/config.json
 ```
 
 The one-line installer is the normal install path. It writes
-`/etc/cfpick/config.json`, installs the platform service unit or plist, enables
+`/etc/tunnelflux/config.json`, installs the platform service unit or plist, enables
 the daemon, and starts it.
 
 `switch` is the manual replacement command. Without `--apply` it probes and prints
@@ -92,7 +92,7 @@ older restart-based behavior.
 
 ## History And Graphs
 
-Each daemon cycle appends one JSONL record to `/var/lib/cfpick/history.jsonl`.
+Each daemon cycle appends one JSONL record to `/var/lib/tunnelflux/history.jsonl`.
 By default the daemon samples every 5 minutes, controlled by
 `switching.probe_interval_seconds`. The file path is configurable through
 `runtime.history_file`.
@@ -101,19 +101,19 @@ History retention defaults to 30 days through `runtime.history_retention_days`.
 Records older than that are pruned after each successful append. Set the value to
 a negative number to disable pruning.
 
-Use `cfpick status` to show a terminal dashboard. It renders a unified status
+Use `tunnelflux status` to show a terminal dashboard. It renders a unified status
 summary, active edge sockets, edge comparison, latest decision state, and a
 time-ordered line chart. The default chart overlays request rate and error rate
 with different colors. Use `--lang zh` or `--zh` for Chinese labels:
 
 ```bash
-cfpick status --metric request_rate --since 24h
-cfpick status --metric response_5xx_delta --since 24h
-cfpick status --metric rss_mb --since 24h
-cfpick status --metric request_delta --since 24h
-cfpick status --metric error_delta --since 24h
-cfpick status --metric rtt --since 24h
-cfpick status --metric ready --since 7d --width 100 --height 16
+tunnelflux status --metric request_rate --since 24h
+tunnelflux status --metric response_5xx_delta --since 24h
+tunnelflux status --metric rss_mb --since 24h
+tunnelflux status --metric request_delta --since 24h
+tunnelflux status --metric error_delta --since 24h
+tunnelflux status --metric rtt --since 24h
+tunnelflux status --metric ready --since 7d --width 100 --height 16
 ```
 
 Supported metrics include `request_rate`, `request_delta`, `error_rate`,
@@ -121,28 +121,44 @@ Supported metrics include `request_rate`, `request_delta`, `error_rate`,
 `goroutines`, `cpu_percent`, `network_rx_rate`, `network_tx_rate`, `rtt`, `ready`,
 `ha`, `concurrent`, `degraded`, and `idle`.
 
+## Architecture
+
+`cmd/tunnelflux` is the only shipped command. It owns the operator-facing commands
+and uses the shared command helpers in `internal/cli` for daemon lifecycle,
+probing, discovery, installation, and JSON output.
+
+The runtime core lives under `internal`. `daemon` makes switch decisions and
+writes history, `probe` ranks edge candidates, `switcher` applies restart or
+blue/green hot switches, `service` abstracts systemd and launchd slot services,
+and `config`, `history`, `hosts`, `slots`, `state`, `discover`, `install`, and
+`cloudflared` keep their narrower responsibilities separate.
+
+The release package is generated from the live installer path. `install.sh`
+downloads the platform archive, installs the binaries, then calls
+`tunnelflux install` to render the host-specific config and service definition.
+
 ## Build And Release
 
 ```bash
 make test
-make dist VERSION=v0.2.13
+make dist VERSION=v0.2.16
 ```
 
 `make dist` builds static binaries for Linux and macOS:
 
 ```text
-dist/cfpick-linux-amd64.tar.gz
-dist/cfpick-linux-arm64.tar.gz
-dist/cfpick-darwin-amd64.tar.gz
-dist/cfpick-darwin-arm64.tar.gz
+dist/tunnelflux-linux-amd64.tar.gz
+dist/tunnelflux-linux-arm64.tar.gz
+dist/tunnelflux-darwin-amd64.tar.gz
+dist/tunnelflux-darwin-arm64.tar.gz
 dist/checksums.txt
 dist/install.sh
 ```
 
-Each archive contains `cfpick`, `cfedgepickd`, `cfedgepickctl`, `install.sh`,
-both systemd service files, and both example config files. `cfpick` remains the
-default compatibility install entrypoint, while the `cfedgepickd` daemon and
-`cfedgepickctl` helper are included in the same package.
+Each archive contains `tunnelflux`, `install.sh`, and
+`configs/tunnelflux.example.json`. Service definitions and installed configs are
+rendered at install time by `tunnelflux install`, so the release does not carry
+static systemd or launchd files.
 
 GitHub Actions runs the same release build for pull requests and pushes to
 `main`, uploading short-lived artifacts for inspection. Pushing a version tag
@@ -150,13 +166,12 @@ creates a GitHub Release and uploads the platform archives, `checksums.txt`,
 and `install.sh`:
 
 ```bash
-git tag v0.2.13
-git push origin v0.2.13
+git tag v0.2.16
+git push origin v0.2.16
 ```
 
-Tag builds embed the tag name in `cfpick version`, `cfedgepickd version`, and
-`cfedgepickctl version`. Non-tag CI builds embed the branch/ref name plus the
-short commit SHA.
+Tag builds embed the tag name in `tunnelflux version`. Non-tag CI builds embed
+the branch/ref name plus the short commit SHA.
 
 ## Safety
 
@@ -171,10 +186,10 @@ Emergency switching can bypass the idle requirement when `readyConnections < 2`.
 Set `switching.emergency_rtt_threshold_ms` to a positive value, for example
 `100`, to also hot-switch immediately when a current edge IP probes above that
 median RTT threshold. The default `0` disables this latency fuse.
-Manual `cfpick switch --apply` intentionally bypasses degraded, cooldown, and idle
+Manual `tunnelflux switch --apply` intentionally bypasses degraded, cooldown, and idle
 gates because it is an explicit operator action. It defaults to blue/green hot
 switching; `--mode restart` is available for the older restart path.
 
 All hosts/config writes are backed up before a switch. If the inactive slot does not
-reach `readyConnections >= 2` before timeout, cfpick stops it, restores the backup,
+reach `readyConnections >= 2` before timeout, tunnelflux stops it, restores the backup,
 and keeps the old active slot running.

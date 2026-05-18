@@ -110,7 +110,7 @@ func Update(path, backupDir string, mappings []Mapping) (string, error) {
 	if !strings.HasSuffix(next, "\n") {
 		next += "\n"
 	}
-	tmp := path + ".cfpick.tmp"
+	tmp := path + ".tunnelflux.tmp"
 	if err := os.WriteFile(tmp, []byte(next), 0644); err != nil {
 		return backup, err
 	}
@@ -129,7 +129,7 @@ func Restore(path, backup string) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".cfpick.restore.tmp"
+	tmp := path + ".tunnelflux.restore.tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return err
 	}

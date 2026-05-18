@@ -1,4 +1,4 @@
-module github.com/kayphoon/cfpick
+module github.com/Kayphoon/TunnelFlux
 
 go 1.22
 

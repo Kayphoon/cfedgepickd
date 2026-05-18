@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfpick/internal/cloudflared"
-	"github.com/kayphoon/cfpick/internal/config"
+	"github.com/Kayphoon/TunnelFlux/internal/cloudflared"
+	"github.com/Kayphoon/TunnelFlux/internal/config"
 )
 
 const (
@@ -79,9 +79,9 @@ func DefaultBlueService() string {
 
 func BlueServiceName(goos string) string {
 	if goos == "darwin" {
-		return "com.kayphoon.cfpick.cloudflared-blue"
+		return "com.kayphoon.tunnelflux.cloudflared-blue"
 	}
-	return "cfpick-cloudflared-blue"
+	return "tunnelflux-cloudflared-blue"
 }
 
 func Load(path string) (State, error) {

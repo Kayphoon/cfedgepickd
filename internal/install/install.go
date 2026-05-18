@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/discover"
-	"github.com/kayphoon/cfpick/internal/probe"
+	"github.com/Kayphoon/TunnelFlux/internal/config"
+	"github.com/Kayphoon/TunnelFlux/internal/discover"
+	"github.com/Kayphoon/TunnelFlux/internal/probe"
 )
 
 const (
@@ -151,7 +151,7 @@ func RenderSystemdUnit(binary, configPath, cloudflaredService string) string {
 	}
 	lines := []string{
 		"[Unit]",
-		"Description=cfpick Cloudflare edge IP picker for cloudflared",
+		"Description=TunnelFlux Cloudflare edge IP picker for cloudflared",
 		fmt.Sprintf("After=network-online.target %s", cloudflaredService),
 		"Wants=network-online.target",
 		"",
@@ -180,7 +180,7 @@ func RenderLaunchdPlist(binary, configPath string) string {
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	b.WriteString(`<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">` + "\n")
 	b.WriteString(`<plist version="1.0">` + "\n<dict>\n")
-	b.WriteString("\t<key>Label</key>\n\t<string>com.kayphoon.cfpick</string>\n")
+	b.WriteString("\t<key>Label</key>\n\t<string>com.kayphoon.tunnelflux</string>\n")
 	b.WriteString("\t<key>ProgramArguments</key>\n\t<array>\n")
 	for _, arg := range args {
 		b.WriteString("\t\t<string>" + escapeXML(arg) + "</string>\n")
@@ -188,8 +188,8 @@ func RenderLaunchdPlist(binary, configPath string) string {
 	b.WriteString("\t</array>\n")
 	b.WriteString("\t<key>RunAtLoad</key>\n\t<true/>\n")
 	b.WriteString("\t<key>KeepAlive</key>\n\t<true/>\n")
-	b.WriteString("\t<key>StandardOutPath</key>\n\t<string>/var/log/cfpick.log</string>\n")
-	b.WriteString("\t<key>StandardErrorPath</key>\n\t<string>/var/log/cfpick.err.log</string>\n")
+	b.WriteString("\t<key>StandardOutPath</key>\n\t<string>/var/log/tunnelflux.log</string>\n")
+	b.WriteString("\t<key>StandardErrorPath</key>\n\t<string>/var/log/tunnelflux.err.log</string>\n")
 	b.WriteString("</dict>\n</plist>\n")
 	return b.String()
 }

@@ -6,10 +6,12 @@ import (
 	"time"
 
 	prettytable "github.com/jedib0t/go-pretty/v6/table"
-	"github.com/kayphoon/cfpick/internal/cloudflared"
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/history"
-	"github.com/kayphoon/cfpick/internal/slots"
+
+	"github.com/Kayphoon/TunnelFlux/internal/cli"
+	"github.com/Kayphoon/TunnelFlux/internal/cloudflared"
+	"github.com/Kayphoon/TunnelFlux/internal/config"
+	"github.com/Kayphoon/TunnelFlux/internal/history"
+	"github.com/Kayphoon/TunnelFlux/internal/slots"
 )
 
 func TestParseWindow(t *testing.T) {
@@ -23,7 +25,7 @@ func TestParseWindow(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, err := parseWindow(tt.raw)
+		got, err := cli.ParseWindow(tt.raw)
 		if err != nil {
 			t.Fatalf("parseWindow(%q) returned error: %v", tt.raw, err)
 		}
@@ -34,10 +36,10 @@ func TestParseWindow(t *testing.T) {
 }
 
 func TestParseWindowRejectsNonPositive(t *testing.T) {
-	if _, err := parseWindow("0h"); err == nil {
+	if _, err := cli.ParseWindow("0h"); err == nil {
 		t.Fatal("expected zero duration error")
 	}
-	if _, err := parseWindow("0d"); err == nil {
+	if _, err := cli.ParseWindow("0d"); err == nil {
 		t.Fatal("expected zero day window error")
 	}
 }
@@ -58,17 +60,6 @@ func TestParseSwitchIPsRejectsInvalidIP(t *testing.T) {
 	}
 }
 
-func TestEdgeRemotesDeduplicates(t *testing.T) {
-	got := edgeRemotes([]cloudflared.EdgeConnection{
-		{Remote: "198.41.1.1:7844"},
-		{Remote: "198.41.1.1:7844"},
-		{Remote: "198.41.1.2:7844"},
-	})
-	if len(got) != 2 || got[0] != "198.41.1.1:7844" || got[1] != "198.41.1.2:7844" {
-		t.Fatalf("unexpected remotes: %+v", got)
-	}
-}
-
 func TestRenderLineChart(t *testing.T) {
 	now := time.Unix(100, 0)
 	points := []history.Point{
@@ -86,7 +77,7 @@ func TestRenderLineChart(t *testing.T) {
 		To:     points[1].Time,
 	}
 
-	out := renderLineChart(points, sum, "24h", 40, 8)
+	out := renderLineChartLocalized(points, sum, "24h", 40, 8, "en")
 	if !strings.Contains(out, "rtt over 24h") {
 		t.Fatalf("chart missing caption:\n%s", out)
 	}
@@ -103,7 +94,7 @@ func TestRenderRequestErrorChart(t *testing.T) {
 		{Time: now.Add(time.Minute), Value: 0.2},
 	}
 
-	out := renderRequestErrorChart(requests, errors, "24h", 40, 8)
+	out := renderRequestErrorChartLocalized(requests, errors, "24h", 40, 8, "en")
 	if !strings.Contains(out, "request_rate and error_rate over 24h") {
 		t.Fatalf("chart missing caption:\n%s", out)
 	}
@@ -123,7 +114,7 @@ func TestRenderEdgeComparison(t *testing.T) {
 		},
 	}
 
-	out := renderEdgeComparison(r, 3)
+	out := renderEdgeComparisonLocalized(r, 3, "en")
 	if !strings.Contains(out, "Edge Comparison") || !strings.Contains(out, "CURRENT #1") {
 		t.Fatalf("comparison table missing expected rows:\n%s", out)
 	}
@@ -139,7 +130,7 @@ func TestRenderEdgeComparisonFallback(t *testing.T) {
 		CurrentIPs:  []string{"198.41.2.1"},
 	}
 
-	out := renderEdgeComparison(r, 3)
+	out := renderEdgeComparisonLocalized(r, 3, "en")
 	if !strings.Contains(out, "198.41.1.1") || !strings.Contains(out, "198.41.2.1") {
 		t.Fatalf("comparison table missing fallback IPs:\n%s", out)
 	}
@@ -156,33 +147,10 @@ func TestIsRequestRateMetric(t *testing.T) {
 	}
 }
 
-func TestRenderOverviewUsesTable(t *testing.T) {
-	out := renderKVTable("Test", []prettytable.Row{{"A", "B"}})
+func TestRenderTableUsesTitleAndHeader(t *testing.T) {
+	out := renderTable("Test", []interface{}{"Field", "Value"}, []prettytable.Row{{"A", "B"}})
 	if !strings.Contains(out, "Test") || !strings.Contains(out, "FIELD") {
 		t.Fatalf("unexpected table:\n%s", out)
-	}
-}
-
-func TestRenderSlotsUsesResolvedActiveEndpoint(t *testing.T) {
-	st := slots.DefaultState(config.Default())
-	st.SetActive(slots.Blue)
-	endpoint := slots.ActiveEndpoint{
-		Slot:       st.Green,
-		State:      st,
-		MetricsURL: st.Green.MetricsURL,
-		ReadyURL:   st.Green.ReadyURL,
-		Source:     "slots.green",
-	}
-
-	out := renderSlots(endpoint)
-	if !strings.Contains(out, "Active") || !strings.Contains(out, "green") || !strings.Contains(out, "slots.green") {
-		t.Fatalf("active row missing resolved green endpoint:\n%s", out)
-	}
-	if !strings.Contains(out, "Green  | ACTIVE") {
-		t.Fatalf("green row should use resolved endpoint state, not stale slots.active:\n%s", out)
-	}
-	if !strings.Contains(out, "Blue   | STANDBY") {
-		t.Fatalf("blue row should not remain active when fallback resolved green:\n%s", out)
 	}
 }
 
@@ -207,9 +175,9 @@ func TestRenderStatusSummaryChinese(t *testing.T) {
 	}
 
 	out := renderStatusSummary(
-		"/etc/cfpick/config.json",
+		"/etc/tunnelflux/config.json",
 		cfg,
-		"/var/lib/cfpick/history.jsonl",
+		"/var/lib/tunnelflux/history.jsonl",
 		"request_rate",
 		"24h",
 		endpoint,

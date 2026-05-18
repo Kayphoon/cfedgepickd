@@ -1,5 +1,5 @@
-/cfedgepickd
-/cfedgepickctl
+/tunnelflux
+.idea/
 dist/
 *.test
 *.out

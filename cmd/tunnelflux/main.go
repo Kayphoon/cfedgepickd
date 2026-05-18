@@ -2,29 +2,25 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"math"
 	"net/netip"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/guptarohit/asciigraph"
 	prettytable "github.com/jedib0t/go-pretty/v6/table"
-	"github.com/kayphoon/cfpick/internal/cloudflared"
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/daemon"
-	"github.com/kayphoon/cfpick/internal/discover"
-	"github.com/kayphoon/cfpick/internal/history"
-	"github.com/kayphoon/cfpick/internal/hosts"
-	"github.com/kayphoon/cfpick/internal/install"
-	"github.com/kayphoon/cfpick/internal/probe"
-	"github.com/kayphoon/cfpick/internal/slots"
+
+	"github.com/Kayphoon/TunnelFlux/internal/cli"
+	"github.com/Kayphoon/TunnelFlux/internal/cloudflared"
+	"github.com/Kayphoon/TunnelFlux/internal/config"
+	"github.com/Kayphoon/TunnelFlux/internal/daemon"
+	"github.com/Kayphoon/TunnelFlux/internal/history"
+	"github.com/Kayphoon/TunnelFlux/internal/hosts"
+	"github.com/Kayphoon/TunnelFlux/internal/slots"
 )
 
 var version = "dev"
@@ -74,7 +70,7 @@ func statusCmd(args []string) {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
-	window, err := parseWindow(*since)
+	window, err := cli.ParseWindow(*since)
 	if err != nil {
 		log.Fatalf("invalid --since: %v", err)
 	}
@@ -110,7 +106,7 @@ func statusCmd(args []string) {
 		latest = &records[len(records)-1]
 	}
 
-	fmt.Printf("cfpick status  %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Printf("tunnelflux status  %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
 	fmt.Println(renderStatusSummary(path, cfg, historyPath, *metric, *since, endpoint, ready, readyErr, metrics, metricsErr, records, latest, lang))
 	fmt.Println()
 	fmt.Println(renderEdgesLocalized(conns, edgesErr, lang))
@@ -159,46 +155,11 @@ func statusCmd(args []string) {
 }
 
 func runCmd(args []string) {
-	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	configPath := fs.String("config", resolveConfigPath(""), "config file")
-	dryRun := fs.Bool("dry-run", false, "force dry-run")
-	apply := fs.Bool("apply", false, "force apply mode")
-	_ = fs.Parse(args)
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		log.Fatalf("load config: %v", err)
-	}
-	if *dryRun {
-		cfg.Runtime.DryRun = true
-	}
-	if *apply {
-		cfg.Runtime.DryRun = false
-	}
-	if err := cfg.Validate(); err != nil {
-		log.Fatalf("invalid config: %v", err)
-	}
-	if err := daemon.Run(context.Background(), cfg); err != nil {
-		log.Fatalf("daemon stopped: %v", err)
-	}
+	cli.RunDaemon(args, resolveConfigPath(""))
 }
 
 func onceCmd(args []string) {
-	fs := flag.NewFlagSet("once", flag.ExitOnError)
-	configPath := fs.String("config", resolveConfigPath(""), "config file")
-	apply := fs.Bool("apply", false, "apply if eligible")
-	_ = fs.Parse(args)
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		log.Fatalf("load config: %v", err)
-	}
-	if !*apply {
-		cfg.Runtime.DryRun = true
-	}
-	decision, sw, err := daemon.Once(context.Background(), cfg, *apply)
-	if err != nil {
-		log.Fatalf("once failed: %v", err)
-	}
-	daemon.PrintDecision(decision, sw)
+	cli.RunOnce(args, resolveConfigPath(""))
 }
 
 func switchCmd(args []string) {
@@ -274,71 +235,20 @@ func parseSwitchIPs(raw string) ([]string, error) {
 }
 
 func discoverCmd(args []string) {
-	fs := flag.NewFlagSet("discover", flag.ExitOnError)
-	pretty := fs.Bool("pretty", true, "pretty JSON")
-	_ = fs.Parse(args)
-	rep, err := discover.Run(context.Background())
-	if err != nil {
-		log.Fatalf("discover failed: %v", err)
-	}
-	printJSON(rep, *pretty)
+	cli.RunDiscover(args)
 }
 
 func probeCmd(args []string) {
-	fs := flag.NewFlagSet("probe", flag.ExitOnError)
-	configPath := fs.String("config", resolveConfigPath(""), "config file")
-	mode := fs.String("protocol", "", "auto, quic, or http2")
-	top := fs.Int("top", 0, "override top_n")
-	pretty := fs.Bool("pretty", true, "pretty JSON")
-	_ = fs.Parse(args)
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		log.Fatalf("load config: %v", err)
-	}
-	if *top > 0 {
-		cfg.Edge.TopN = *top
-	}
-	if *mode != "" {
-		cfg.Cloudflared.Protocol = *mode
-	}
-	if err := cfg.Validate(); err != nil {
-		log.Fatalf("invalid config: %v", err)
-	}
-	rep, err := probe.Run(context.Background(), cfg, probe.Mode(cfg.Cloudflared.Protocol))
-	if err != nil {
-		printJSON(rep, *pretty)
-		log.Fatalf("probe failed: %v", err)
-	}
-	printJSON(rep, *pretty)
+	cli.RunProbe(args, resolveConfigPath(""))
 }
 
 func installCmd(args []string) {
-	fs := flag.NewFlagSet("install", flag.ExitOnError)
-	apply := fs.Bool("apply", false, "write config and systemd unit")
-	dryRun := fs.Bool("dry-run", false, "print discovered config and planned writes without changing files")
-	protocol := fs.String("protocol", "auto", "auto, quic, or http2")
-	configPath := fs.String("config", config.DefaultConfigPath, "target config path")
-	binary := fs.String("binary", config.DefaultBinaryPath, "binary path in systemd unit")
-	unit := fs.String("unit", config.DefaultUnitPath(), "target service unit/plist path")
-	emergencyRTTMS := fs.Float64("emergency-rtt-ms", 0, "immediate hot-switch threshold in ms; 0 disables")
-	pretty := fs.Bool("pretty", true, "pretty JSON")
-	_ = fs.Parse(args)
-	applyMode := *apply && !*dryRun
-	rep, err := install.Run(context.Background(), install.Options{
-		Apply:                   applyMode,
-		Protocol:                *protocol,
-		Config:                  *configPath,
-		Binary:                  *binary,
-		UnitPath:                *unit,
-		EmergencyRTTThresholdMS: *emergencyRTTMS,
+	cli.RunInstall(args, cli.InstallDefaults{
+		ConfigPath:          config.DefaultConfigPath,
+		BinaryPath:          config.DefaultBinaryPath,
+		UnitPath:            config.DefaultUnitPath(),
+		IncludeEmergencyRTT: true,
 	})
-	if err != nil {
-		log.Printf("install completed with probe warning/error: %v", err)
-	}
-	printJSON(rep, *pretty)
-	if err != nil && applyMode {
-		os.Exit(1)
-	}
 }
 
 func resolveConfigPath(explicit string) string {
@@ -347,9 +257,6 @@ func resolveConfigPath(explicit string) string {
 	}
 	if _, err := os.Stat(config.DefaultConfigPath); err == nil {
 		return config.DefaultConfigPath
-	}
-	if _, err := os.Stat(config.LegacyConfigPath); err == nil {
-		return config.LegacyConfigPath
 	}
 	return config.DefaultConfigPath
 }
@@ -361,26 +268,7 @@ func resolveHistoryPath(path string) string {
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
-	const legacy = "/var/lib/cfedgepickd/history.jsonl"
-	if path == "/var/lib/cfpick/history.jsonl" {
-		if _, err := os.Stat(legacy); err == nil {
-			return legacy
-		}
-	}
 	return path
-}
-
-func edgeRemotes(conns []cloudflared.EdgeConnection) []string {
-	out := make([]string, 0, len(conns))
-	seen := map[string]bool{}
-	for _, c := range conns {
-		if c.Remote == "" || seen[c.Remote] {
-			continue
-		}
-		seen[c.Remote] = true
-		out = append(out, c.Remote)
-	}
-	return out
 }
 
 func hostMappingEdges(current map[string]string, hostnames []string) []cloudflared.EdgeConnection {
@@ -398,31 +286,6 @@ func hostMappingEdges(current map[string]string, hostnames []string) []cloudflar
 		})
 	}
 	return conns
-}
-
-func renderOverview(configPath string, cfg config.Config, historyPath, metric, since string) string {
-	retention := "disabled"
-	if cfg.Runtime.HistoryRetentionDays > 0 {
-		retention = fmt.Sprintf("%dd", cfg.Runtime.HistoryRetentionDays)
-	}
-	emergencyRTT := "disabled"
-	if cfg.Switching.EmergencyRTTThresholdMS > 0 {
-		emergencyRTT = fmt.Sprintf("%.0f ms", cfg.Switching.EmergencyRTTThresholdMS)
-	}
-	return renderKVTable("Overview", []prettytable.Row{
-		{"Config", configPath},
-		{"Protocol", cfg.Cloudflared.Protocol},
-		{"Switch Strategy", cfg.Switching.Strategy},
-		{"Emergency RTT", emergencyRTT},
-		{"Metrics", cfg.Cloudflared.MetricsURL},
-		{"Ready", cfg.Cloudflared.ReadyURL},
-		{"Slots", cfg.Runtime.SlotsFile},
-		{"History", historyPath},
-		{"Sample Interval", (time.Duration(cfg.Switching.ProbeIntervalSeconds) * time.Second).String()},
-		{"History Retention", retention},
-		{"Window", since},
-		{"Metric", metric},
-	})
 }
 
 func renderStatusSummary(configPath string, cfg config.Config, historyPath, metric, since string, endpoint slots.ActiveEndpoint, ready cloudflared.Ready, readyErr error, metrics cloudflared.Metrics, metricsErr error, records []history.Record, latest *history.Record, lang string) string {
@@ -502,101 +365,11 @@ func renderStatusSummary(configPath string, cfg config.Config, historyPath, metr
 	return renderTable(tr(lang, "Status Summary"), []interface{}{tr(lang, "Section"), tr(lang, "Item"), tr(lang, "State"), tr(lang, "Value")}, rows)
 }
 
-func renderSlots(endpoint slots.ActiveEndpoint) string {
-	st := endpoint.State
-	active := endpoint.Slot
-	rows := []prettytable.Row{
-		{"Active", emptyDash(active.Name), emptyDash(active.Service), emptyDash(endpoint.MetricsURL), emptyDash(endpoint.Source)},
-		{"Green", slotStateLabel(active.Name == slots.Green), emptyDash(st.Green.Service), emptyDash(st.Green.MetricsURL), emptyDash(st.LastResult)},
-		{"Blue", slotStateLabel(active.Name == slots.Blue), emptyDash(st.Blue.Service), emptyDash(st.Blue.MetricsURL), emptyDash(st.LastMessage)},
-	}
-	return renderTable("Slots", []interface{}{"Slot", "State", "Service", "Metrics", "Detail"}, rows)
-}
-
 func slotStateLabel(active bool) string {
 	if active {
 		return "ACTIVE"
 	}
 	return "STANDBY"
-}
-
-func renderHealth(ready cloudflared.Ready, readyErr error, metrics cloudflared.Metrics, metricsErr error) string {
-	rows := []prettytable.Row{}
-	if readyErr != nil {
-		rows = append(rows, prettytable.Row{"Ready", "UNKNOWN", readyErr.Error()})
-	} else {
-		rows = append(rows, prettytable.Row{
-			"Ready",
-			statusLabel(ready.ReadyConnections >= 2),
-			fmt.Sprintf("connections=%d connector=%s", ready.ReadyConnections, emptyDash(ready.ConnectorID)),
-		})
-	}
-	if metricsErr != nil {
-		rows = append(rows, prettytable.Row{"Metrics", "UNKNOWN", metricsErr.Error()})
-	} else {
-		rows = append(rows,
-			prettytable.Row{"HA", statusLabel(metrics.HAConnections >= 2), fmt.Sprintf("ha_connections=%d", metrics.HAConnections)},
-			prettytable.Row{"Traffic", trafficLabel(metrics.ConcurrentRequests), fmt.Sprintf("concurrent=%d total_requests=%.0f", metrics.ConcurrentRequests, metrics.TotalRequests)},
-			prettytable.Row{"Errors", errorLabel(metrics.RequestErrors), fmt.Sprintf("request_errors=%.0f", metrics.RequestErrors)},
-		)
-	}
-	return renderTable("Health", []interface{}{"Signal", "State", "Detail"}, rows)
-}
-
-func renderPerformance(metrics cloudflared.Metrics, metricsErr error, records []history.Record) string {
-	if metricsErr != nil {
-		return renderTable("Performance", []interface{}{"Signal", "State", "Detail"}, []prettytable.Row{
-			{"Metrics", "UNKNOWN", metricsErr.Error()},
-		})
-	}
-	delta := performanceFromHistory(records)
-	rows := []prettytable.Row{
-		{
-			"Requests",
-			activityLabel(delta.RequestRate),
-			fmt.Sprintf("%s, +%.0f last interval, total=%.0f", formatPerSecond(delta.RequestRate, "req"), delta.RequestDelta, metrics.TotalRequests),
-		},
-		{
-			"Errors",
-			statusLabel(delta.ErrorDelta == 0),
-			fmt.Sprintf("%s, +%.0f last interval, total=%.0f", formatPerSecond(delta.ErrorRate, "err"), delta.ErrorDelta, metrics.RequestErrors),
-		},
-		{
-			"HTTP Codes",
-			statusLabel(delta.Response5xxDelta == 0),
-			fmt.Sprintf("2xx=%.0f 3xx=%.0f 4xx=%.0f 5xx=%.0f, delta_5xx=%.0f", metrics.Response2xx, metrics.Response3xx, metrics.Response4xx, metrics.Response5xx, delta.Response5xxDelta),
-		},
-		{
-			"Connect Latency",
-			availabilityLabel(metrics.ProxyConnectLatencyHits > 0),
-			fmt.Sprintf("avg=%s samples=%.0f", formatMS(delta.ProxyConnectAvgMS), metrics.ProxyConnectLatencyHits),
-		},
-		{
-			"Sessions",
-			activityLabel(metrics.TCPActiveSessions + metrics.UDPActiveSessions),
-			fmt.Sprintf("tcp_active=%.0f tcp_total=%.0f udp_active=%.0f udp_total=%.0f", metrics.TCPActiveSessions, metrics.TCPTotalSessions, metrics.UDPActiveSessions, metrics.UDPTotalSessions),
-		},
-		{
-			"Runtime",
-			"OK",
-			fmt.Sprintf("rss=%s heap=%s goroutines=%.0f threads=%.0f cpu=%s", formatBytes(metrics.ProcessRSSBytes), formatBytes(metrics.GoHeapAllocBytes), metrics.GoGoroutines, metrics.GoThreads, formatPercent(delta.CPUPercent)),
-		},
-		{
-			"Network",
-			activityLabel(delta.NetworkRxRate + delta.NetworkTxRate),
-			fmt.Sprintf("rx=%s (%s) tx=%s (%s)", formatBytes(metrics.ProcessNetworkRxBytes), formatBytesPerSecond(delta.NetworkRxRate), formatBytes(metrics.ProcessNetworkTxBytes), formatBytesPerSecond(delta.NetworkTxRate)),
-		},
-	}
-	if delta.HasLast {
-		rows = append(rows, prettytable.Row{"Sample Gap", "INFO", delta.Elapsed.Round(time.Second).String()})
-	} else {
-		rows = append(rows, prettytable.Row{"Sample Gap", "INFO", "need two history samples for rates"})
-	}
-	return renderTable("Performance", []interface{}{"Signal", "State", "Detail"}, rows)
-}
-
-func renderEdges(conns []cloudflared.EdgeConnection, err error) string {
-	return renderEdgesLocalized(conns, err, "en")
 }
 
 func renderEdgesLocalized(conns []cloudflared.EdgeConnection, err error, lang string) string {
@@ -615,28 +388,6 @@ func renderEdgesLocalized(conns []cloudflared.EdgeConnection, err error, lang st
 		rows = append(rows, prettytable.Row{i + 1, conn.IP, conn.Remote, conn.Local})
 	}
 	return renderTable(tr(lang, "Current Edges"), []interface{}{"#", "IP", tr(lang, "Remote"), tr(lang, "Local")}, rows)
-}
-
-func renderLatest(r history.Record) string {
-	return renderKVTable("Latest Sample", []prettytable.Row{
-		{"Time", formatTime(r.Time)},
-		{"Effective Protocol", emptyDash(r.EffectiveProtocol)},
-		{"Top IP", emptyDash(r.TopIP)},
-		{"Top RTT", formatMS(r.TopMedianMS)},
-		{"Ready / HA", fmt.Sprintf("%d / %d", r.ReadyConnections, r.HAConnections)},
-		{"Requests / Errors", fmt.Sprintf("%.0f / %.0f", r.TotalRequests, r.RequestErrors)},
-		{"HTTP 2xx/3xx/4xx/5xx", fmt.Sprintf("%.0f / %.0f / %.0f / %.0f", r.Response2xx, r.Response3xx, r.Response4xx, r.Response5xx)},
-		{"RSS / Goroutines", fmt.Sprintf("%s / %.0f", formatBytes(r.ProcessRSSBytes), r.GoGoroutines)},
-		{"Idle", yesNo(r.Idle)},
-		{"Degraded", yesNo(r.Degraded)},
-		{"Should Switch", yesNo(r.ShouldSwitch)},
-		{"Switch Applied", yesNo(r.SwitchApplied)},
-		{"Reason", emptyDash(r.Reason)},
-	})
-}
-
-func renderEdgeComparison(r history.Record, degradedFactor float64) string {
-	return renderEdgeComparisonLocalized(r, degradedFactor, "en")
 }
 
 func renderEdgeComparisonLocalized(r history.Record, degradedFactor float64, lang string) string {
@@ -667,10 +418,6 @@ func renderEdgeComparisonLocalized(r history.Record, degradedFactor float64, lan
 		})
 	}
 	return renderTable(tr(lang, "Edge Comparison"), []interface{}{tr(lang, "Role"), tr(lang, "State"), "IP", tr(lang, "Median"), tr(lang, "OK/Fail"), tr(lang, "Vs Best"), tr(lang, "Score")}, rows)
-}
-
-func edgeComparisonRow(role, kind string, p history.IPProbe, best, degradedFactor float64) prettytable.Row {
-	return edgeComparisonRowLocalized(role, kind, p, best, degradedFactor, "en")
 }
 
 func edgeComparisonRowLocalized(role, kind string, p history.IPProbe, best, degradedFactor float64, lang string) prettytable.Row {
@@ -746,10 +493,6 @@ func vsBestLabel(ms, best float64) string {
 	return fmt.Sprintf("+%.2f ms / %.1fx", ms-best, ms/best)
 }
 
-func renderTrendSummary(sum history.Summary, since string) string {
-	return renderTrendSummaryLocalized(sum, since, "en")
-}
-
 func renderTrendSummaryLocalized(sum history.Summary, since string, lang string) string {
 	if sum.Count == 0 {
 		return renderTable(tr(lang, "Trend"), []interface{}{tr(lang, "Window"), tr(lang, "Metric"), tr(lang, "Points")}, []prettytable.Row{
@@ -769,10 +512,6 @@ func renderTrendSummaryLocalized(sum history.Summary, since string, lang string)
 			formatTime(sum.To),
 		},
 	})
-}
-
-func renderMultiTrendSummary(since string, summaries []history.Summary) string {
-	return renderMultiTrendSummaryLocalized(since, summaries, "en")
 }
 
 func renderMultiTrendSummaryLocalized(since string, summaries []history.Summary, lang string) string {
@@ -797,10 +536,6 @@ func renderMultiTrendSummaryLocalized(since string, summaries []history.Summary,
 	return renderTable(tr(lang, "Trend"), []interface{}{tr(lang, "Window"), tr(lang, "Metric"), tr(lang, "Points"), tr(lang, "Latest"), tr(lang, "Min"), tr(lang, "Avg"), tr(lang, "Max"), tr(lang, "From"), tr(lang, "To")}, rows)
 }
 
-func renderLineChart(points []history.Point, sum history.Summary, since string, width, height int) string {
-	return renderLineChartLocalized(points, sum, since, width, height, "en")
-}
-
 func renderLineChartLocalized(points []history.Point, sum history.Summary, since string, width, height int, lang string) string {
 	values := make([]float64, 0, len(points))
 	for _, point := range points {
@@ -818,10 +553,6 @@ func renderLineChartLocalized(points []history.Point, sum history.Summary, since
 		opts = append(opts, asciigraph.LowerBound(sum.Min-1), asciigraph.UpperBound(sum.Max+1))
 	}
 	return asciigraph.Plot(values, opts...)
-}
-
-func renderRequestErrorChart(requestPoints, errorPoints []history.Point, since string, width, height int) string {
-	return renderRequestErrorChartLocalized(requestPoints, errorPoints, since, width, height, "en")
 }
 
 func renderRequestErrorChartLocalized(requestPoints, errorPoints []history.Point, since string, width, height int, lang string) string {
@@ -860,10 +591,6 @@ func alignSeries(values []float64, want int) []float64 {
 func isRequestRateMetric(metric string) bool {
 	metric = strings.TrimSpace(strings.ToLower(metric))
 	return metric == "" || metric == "request_rate" || metric == "requests_rate" || metric == "rps"
-}
-
-func renderKVTable(title string, rows []prettytable.Row) string {
-	return renderTable(title, []interface{}{"Field", "Value"}, rows)
 }
 
 func renderTable(title string, header []interface{}, rows []prettytable.Row) string {
@@ -1201,44 +928,6 @@ func clamp(v, min, max int) int {
 	return v
 }
 
-func printJSON(v any, pretty bool) {
-	var data []byte
-	var err error
-	if pretty {
-		data, err = json.MarshalIndent(v, "", "  ")
-	} else {
-		data, err = json.Marshal(v)
-	}
-	if err != nil {
-		log.Fatalf("json: %v", err)
-	}
-	fmt.Println(string(data))
-}
-
-func parseWindow(raw string) (time.Duration, error) {
-	if raw == "" {
-		return 24 * time.Hour, nil
-	}
-	if strings.HasSuffix(raw, "d") {
-		days, err := strconv.Atoi(strings.TrimSuffix(raw, "d"))
-		if err != nil {
-			return 0, err
-		}
-		if days <= 0 {
-			return 0, errors.New("day window must be positive")
-		}
-		return time.Duration(days) * 24 * time.Hour, nil
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, err
-	}
-	if d <= 0 {
-		return 0, errors.New("window must be positive")
-	}
-	return d, nil
-}
-
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cfpick status|run|once|switch|discover|probe|install|version [flags]\n")
+	fmt.Fprintf(os.Stderr, "usage: tunnelflux status|run|once|switch|discover|probe|install|version [flags]\n")
 }

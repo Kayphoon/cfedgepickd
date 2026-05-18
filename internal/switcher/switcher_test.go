@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/service"
-	"github.com/kayphoon/cfpick/internal/slots"
+	"github.com/Kayphoon/TunnelFlux/internal/config"
+	"github.com/Kayphoon/TunnelFlux/internal/service"
+	"github.com/Kayphoon/TunnelFlux/internal/slots"
 )
 
 func TestApplyUsesRestartStrategyWhenConfigured(t *testing.T) {

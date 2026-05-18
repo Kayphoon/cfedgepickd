@@ -30,15 +30,15 @@ func TestParseSystemdExecStart(t *testing.T) {
 }
 
 func TestRenderSystemdUnitIncludesMetrics(t *testing.T) {
-	unit := RenderSystemdUnit("cfpick-cloudflared-blue", []string{"cloudflared", "--metrics", "127.0.0.1:20242", "tunnel", "run"})
+	unit := RenderSystemdUnit("tunnelflux-cloudflared-blue", []string{"cloudflared", "--metrics", "127.0.0.1:20242", "tunnel", "run"})
 	if !strings.Contains(unit, "ExecStart=cloudflared --metrics 127.0.0.1:20242 tunnel run") {
 		t.Fatalf("unit missing metrics args:\n%s", unit)
 	}
 }
 
 func TestRenderLaunchdPlistIncludesProgramArguments(t *testing.T) {
-	plist := RenderLaunchdPlist("com.kayphoon.cfpick.cloudflared-blue", []string{"cloudflared", "--metrics", "127.0.0.1:20242", "tunnel", "run"})
-	if !strings.Contains(plist, "<string>com.kayphoon.cfpick.cloudflared-blue</string>") || !strings.Contains(plist, "<string>127.0.0.1:20242</string>") {
+	plist := RenderLaunchdPlist("com.kayphoon.tunnelflux.cloudflared-blue", []string{"cloudflared", "--metrics", "127.0.0.1:20242", "tunnel", "run"})
+	if !strings.Contains(plist, "<string>com.kayphoon.tunnelflux.cloudflared-blue</string>") || !strings.Contains(plist, "<string>127.0.0.1:20242</string>") {
 		t.Fatalf("plist missing label or metrics:\n%s", plist)
 	}
 }

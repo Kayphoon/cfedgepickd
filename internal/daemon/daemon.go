@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfpick/internal/cloudflared"
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/history"
-	"github.com/kayphoon/cfpick/internal/hosts"
-	"github.com/kayphoon/cfpick/internal/probe"
-	"github.com/kayphoon/cfpick/internal/slots"
-	"github.com/kayphoon/cfpick/internal/state"
-	"github.com/kayphoon/cfpick/internal/switcher"
+	"github.com/Kayphoon/TunnelFlux/internal/cloudflared"
+	"github.com/Kayphoon/TunnelFlux/internal/config"
+	"github.com/Kayphoon/TunnelFlux/internal/history"
+	"github.com/Kayphoon/TunnelFlux/internal/hosts"
+	"github.com/Kayphoon/TunnelFlux/internal/probe"
+	"github.com/Kayphoon/TunnelFlux/internal/slots"
+	"github.com/Kayphoon/TunnelFlux/internal/state"
+	"github.com/Kayphoon/TunnelFlux/internal/switcher"
 )
 
 type Decision struct {

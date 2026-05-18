@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kayphoon/cfpick/internal/config"
-	"github.com/kayphoon/cfpick/internal/service"
+	"github.com/Kayphoon/TunnelFlux/internal/config"
+	"github.com/Kayphoon/TunnelFlux/internal/service"
 )
 
 type Report struct {
@@ -140,7 +140,7 @@ func pickCloudflaredService(units string) string {
 		if name == "cloudflared.service" {
 			return name
 		}
-		if strings.HasPrefix(name, "cfpick-cloudflared-") {
+		if strings.HasPrefix(name, "tunnelflux-cloudflared-") {
 			continue
 		}
 		if fallback == "" && strings.Contains(name, "cloudflared") {

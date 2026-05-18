@@ -4,15 +4,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kayphoon/cfpick/internal/config"
+	"github.com/Kayphoon/TunnelFlux/internal/config"
 )
 
 func TestRenderUnitUsesDiscoveredCloudflaredService(t *testing.T) {
-	unit := RenderUnit("/usr/bin/cfpick", "/etc/cfpick/config.json", "cloudflared-custom")
+	unit := RenderUnit("/usr/bin/tunnelflux", "/etc/tunnelflux/config.json", "cloudflared-custom")
 	if !strings.Contains(unit, "After=network-online.target cloudflared-custom.service") {
 		t.Fatalf("unit did not use discovered service:\n%s", unit)
 	}
-	if !strings.Contains(unit, "ExecStart=/usr/bin/cfpick run --config /etc/cfpick/config.json") {
+	if !strings.Contains(unit, "ExecStart=/usr/bin/tunnelflux run --config /etc/tunnelflux/config.json") {
 		t.Fatalf("unit did not render ExecStart:\n%s", unit)
 	}
 }
@@ -38,11 +38,11 @@ func TestProbeConfigForInstallCapsHeavyDefaults(t *testing.T) {
 }
 
 func TestRenderLaunchdPlistUsesCfpickRun(t *testing.T) {
-	plist := RenderLaunchdPlist("/usr/local/bin/cfpick", "/etc/cfpick/config.json")
-	if !strings.Contains(plist, "<string>com.kayphoon.cfpick</string>") {
+	plist := RenderLaunchdPlist("/usr/local/bin/tunnelflux", "/etc/tunnelflux/config.json")
+	if !strings.Contains(plist, "<string>com.kayphoon.tunnelflux</string>") {
 		t.Fatalf("plist missing label:\n%s", plist)
 	}
-	if !strings.Contains(plist, "<string>/usr/local/bin/cfpick</string>") || !strings.Contains(plist, "<string>run</string>") {
-		t.Fatalf("plist missing cfpick run args:\n%s", plist)
+	if !strings.Contains(plist, "<string>/usr/local/bin/tunnelflux</string>") || !strings.Contains(plist, "<string>run</string>") {
+		t.Fatalf("plist missing tunnelflux run args:\n%s", plist)
 	}
 }
