@@ -1,5 +1,4 @@
-/cfedgepickd
-/cfedgepickctl
+/tf
 dist/
 *.test
 *.out
