@@ -61,3 +61,22 @@ cloudflared_tunnel_server_locations{connection_id="1",edge_location="lax05"} 1
 		t.Fatalf("unexpected locations: %+v", m.ServerLocations)
 	}
 }
+
+func TestParseSSConnectionsIncludesUDPCloudflaredEdges(t *testing.T) {
+	input := `
+udp   ESTAB 0      0      10.0.0.10:39102 198.41.200.113:7844 users:(("cloudflared",pid=1234,fd=8))
+tcp   ESTAB 0      0      10.0.0.10:39103 198.41.200.114:7844 users:(("cloudflared",pid=1234,fd=9))
+tcp   ESTAB 0      0      10.0.0.10:39104 203.0.113.10:443 users:(("cloudflared",pid=1234,fd=10))
+udp   ESTAB 0      0      10.0.0.10:39105 198.41.200.115:7844 users:(("other",pid=1235,fd=11))
+`
+	conns := parseSSConnections(input, 7844)
+	if len(conns) != 2 {
+		t.Fatalf("expected UDP and TCP cloudflared :7844 edges, got %d: %+v", len(conns), conns)
+	}
+	if conns[0].Remote != "198.41.200.113:7844" || conns[0].IP != "198.41.200.113" {
+		t.Fatalf("unexpected UDP edge: %+v", conns[0])
+	}
+	if conns[1].Remote != "198.41.200.114:7844" || conns[1].IP != "198.41.200.114" {
+		t.Fatalf("unexpected TCP edge: %+v", conns[1])
+	}
+}

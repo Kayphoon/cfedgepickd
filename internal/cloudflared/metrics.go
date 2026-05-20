@@ -209,34 +209,58 @@ func CurrentEdges(ctx context.Context, port int) ([]EdgeConnection, error) {
 	if runtime.GOOS == "darwin" {
 		return currentEdgesLsof(ctx, port)
 	}
-	cmd := exec.CommandContext(ctx, "ss", "-ntp")
+	cmd := exec.CommandContext(ctx, "ss", "-H", "-ntup")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}
+	return parseSSConnections(string(out), port), nil
+}
+
+func parseSSConnections(output string, port int) []EdgeConnection {
+	portNeedle := fmt.Sprintf(":%d", port)
 	var conns []EdgeConnection
-	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.Contains(line, "cloudflared") || !strings.Contains(line, fmt.Sprintf(":%d", port)) {
+	for _, line := range strings.Split(output, "\n") {
+		if !strings.Contains(line, portNeedle) {
+			continue
+		}
+		if strings.Contains(line, "users:") && !strings.Contains(line, "cloudflared") {
 			continue
 		}
 		fields := strings.Fields(line)
 		if len(fields) < 5 {
 			continue
 		}
-		remote := fields[4]
+		local, remote, ok := ssLocalRemote(fields, portNeedle)
+		if !ok {
+			continue
+		}
 		ip := hostPart(remote)
 		conns = append(conns, EdgeConnection{
-			Local:  fields[3],
+			Local:  local,
 			Remote: remote,
 			IP:     ip,
 			Line:   line,
 		})
 	}
-	return conns, nil
+	return conns
+}
+
+func ssLocalRemote(fields []string, portNeedle string) (string, string, bool) {
+	for i, field := range fields {
+		if strings.Contains(field, portNeedle) {
+			if i == 0 {
+				return "", "", false
+			}
+			return fields[i-1], field, true
+		}
+	}
+	return "", "", false
 }
 
 func currentEdgesLsof(ctx context.Context, port int) ([]EdgeConnection, error) {
-	cmd := exec.CommandContext(ctx, "lsof", "-nP", "-iTCP:"+strconv.Itoa(port))
+	portFilter := strconv.Itoa(port)
+	cmd := exec.CommandContext(ctx, "lsof", "-nP", "-iTCP:"+portFilter, "-iUDP:"+portFilter)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
