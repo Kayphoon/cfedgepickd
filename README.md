@@ -58,10 +58,11 @@ curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh
 
 The installer detects Linux/macOS and `amd64`/`arm64`, downloads the matching
 release archive, verifies `checksums.txt` when available, installs the binary,
-writes `/etc/tunnelflux/config.json`, writes the platform service definition, enables
-the daemon, and starts it. Use `--dry-run` only when you want a preview without
-changing the machine, and `--no-start` when you want to install without starting
-the daemon.
+writes `/etc/tunnelflux/config.json`, writes the platform service definition,
+probes a fast initial edge sample, pins the first preferred edge IP set through
+`/etc/hosts`, verifies the new `cloudflared` path, enables the daemon, and starts
+it. Use `--dry-run` only when you want a preview without changing the machine,
+and `--no-start` when you want to install without starting the daemon.
 
 ## Commands
 
@@ -80,8 +81,8 @@ tf run --config /etc/tunnelflux/config.json
 ```
 
 The one-line installer is the normal install path. It writes
-`/etc/tunnelflux/config.json`, installs the platform service unit or plist, enables
-the daemon, and starts it.
+`/etc/tunnelflux/config.json`, installs the platform service unit or plist,
+applies the first preferred edge IP set, enables the daemon, and starts it.
 
 `switch` is the manual replacement command. Without `--apply` it probes and prints
 the planned blue/green switch. With `--apply` it writes the selected IPs, starts
@@ -171,6 +172,10 @@ median RTT threshold. The default `0` disables this latency fuse.
 Manual `tf switch --apply` intentionally bypasses degraded, cooldown, and idle
 gates because it is an explicit operator action. It defaults to blue/green hot
 switching; `--mode restart` is available for the older restart path.
+
+The installer also performs one explicit initial apply after its fast probe. That
+means a fresh install can change the live tunnel edge immediately instead of
+waiting for the daemon to observe a degraded current edge later.
 
 All hosts/config writes are backed up before a switch. If the inactive slot does not
 reach `readyConnections >= 2` before timeout, TunnelFlux stops it, restores the backup,
