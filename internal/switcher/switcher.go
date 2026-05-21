@@ -138,32 +138,31 @@ func ApplyHot(ctx context.Context, cfg config.Config, ips []string, protocol str
 	if st.Active == "" {
 		st.Active = slots.Green
 	}
-	exclude := map[int]bool{}
-	if p := slots.PortFromURL(st.Green.MetricsURL); p > 0 {
-		exclude[p] = true
-	}
-	if p := slots.PortFromURL(st.Blue.MetricsURL); p > 0 && p != cfg.Switching.HotMetricsPortStart {
-		exclude[p] = true
-	}
-	bluePort := slots.PortFromURL(st.Blue.MetricsURL)
-	if st.Blue.MetricsURL == "" || st.Blue.ReadyURL == "" || bluePort == 0 || exclude[bluePort] {
-		addr, err := slots.FindFreeMetricsAddr(cfg.Switching.HotMetricsHost, cfg.Switching.HotMetricsPortStart, cfg.Switching.HotMetricsPortEnd, exclude)
-		if err != nil {
-			if !cfg.Runtime.DryRun {
-				return Result{}, err
-			}
-			portErr := err
-			addr, err = slots.FirstMetricsAddr(cfg.Switching.HotMetricsHost, cfg.Switching.HotMetricsPortStart, cfg.Switching.HotMetricsPortEnd, exclude)
-			if err != nil {
-				return Result{}, err
-			}
-			warnings = append(warnings, "metrics port availability not verified: "+portErr.Error())
-		}
-		st.Blue.MetricsURL = "http://" + addr + "/metrics"
-		st.Blue.ReadyURL = "http://" + addr + "/ready"
-	}
 	if oldActive, changed := reconcileActiveFromService(ctx, mgr, &st); changed {
 		warnings = append(warnings, fmt.Sprintf("active slot reconciled from %s to %s using service status", oldActive, st.Active))
+	}
+	if st.InactiveSlot().Name == slots.Blue {
+		exclude := map[int]bool{}
+		if p := slots.PortFromURL(st.Green.MetricsURL); p > 0 {
+			exclude[p] = true
+		}
+		bluePort := slots.PortFromURL(st.Blue.MetricsURL)
+		if st.Blue.MetricsURL == "" || st.Blue.ReadyURL == "" || bluePort == 0 || exclude[bluePort] {
+			addr, err := slots.FindFreeMetricsAddr(cfg.Switching.HotMetricsHost, cfg.Switching.HotMetricsPortStart, cfg.Switching.HotMetricsPortEnd, exclude)
+			if err != nil {
+				if !cfg.Runtime.DryRun {
+					return Result{}, err
+				}
+				portErr := err
+				addr, err = slots.FirstMetricsAddr(cfg.Switching.HotMetricsHost, cfg.Switching.HotMetricsPortStart, cfg.Switching.HotMetricsPortEnd, exclude)
+				if err != nil {
+					return Result{}, err
+				}
+				warnings = append(warnings, "metrics port availability not verified: "+portErr.Error())
+			}
+			st.Blue.MetricsURL = "http://" + addr + "/metrics"
+			st.Blue.ReadyURL = "http://" + addr + "/ready"
+		}
 	}
 	active := st.ActiveSlot()
 	inactive := st.InactiveSlot()
