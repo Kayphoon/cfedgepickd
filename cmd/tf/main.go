@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/netip"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -94,6 +95,11 @@ func statusCmd(args []string) {
 	ready, readyErr := cloudflared.FetchReady(ctx, cfg.Cloudflared.ReadyURL)
 	metrics, metricsErr := cloudflared.FetchMetrics(ctx, cfg.Cloudflared.MetricsURL)
 	conns, edgesErr := cloudflared.CurrentEdges(ctx, cfg.Edge.Port)
+	if edgesErr == nil && len(conns) == 0 {
+		if metricsErr == nil {
+			conns = metricsLocationEdges(metrics)
+		}
+	}
 	if edgesErr == nil && len(conns) == 0 {
 		if current, err := hosts.Current(cfg.Runtime.HostsFile, cfg.Edge.Hostnames); err == nil {
 			conns = hostMappingEdges(current, cfg.Edge.Hostnames)
@@ -386,6 +392,38 @@ func hostMappingEdges(current map[string]string, hostnames []string) []cloudflar
 			Remote: h,
 			IP:     ip,
 			Line:   ip + " " + h,
+			Source: "hosts",
+		})
+	}
+	return conns
+}
+
+func metricsLocationEdges(metrics cloudflared.Metrics) []cloudflared.EdgeConnection {
+	if len(metrics.ServerLocations) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(metrics.ServerLocations))
+	for id := range metrics.ServerLocations {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		left, leftErr := strconv.Atoi(ids[i])
+		right, rightErr := strconv.Atoi(ids[j])
+		if leftErr == nil && rightErr == nil {
+			return left < right
+		}
+		return ids[i] < ids[j]
+	})
+
+	conns := make([]cloudflared.EdgeConnection, 0, len(ids))
+	for _, id := range ids {
+		location := metrics.ServerLocations[id]
+		conns = append(conns, cloudflared.EdgeConnection{
+			Local:  "metrics",
+			Remote: id,
+			IP:     location,
+			Line:   "connection_id=" + id + " edge_location=" + location,
+			Source: "metrics",
 		})
 	}
 	return conns
@@ -598,14 +636,33 @@ func renderEdgesLocalized(conns []cloudflared.EdgeConnection, err error, lang st
 	}
 	if len(conns) == 0 {
 		return renderTable(tr(lang, "Current Edges"), []interface{}{tr(lang, "State"), tr(lang, "Detail")}, []prettytable.Row{
-			{stateText(lang, "EMPTY"), tr(lang, "no cloudflared :7844 sockets found")},
+			{stateText(lang, "EMPTY"), tr(lang, "no cloudflared edge sockets or metrics locations found")},
 		})
+	}
+	if allMetricEdges(conns) {
+		rows := make([]prettytable.Row, 0, len(conns))
+		for i, conn := range conns {
+			rows = append(rows, prettytable.Row{i + 1, conn.IP, tr(lang, "connection ") + conn.Remote, tr(lang, "cloudflared metrics")})
+		}
+		return renderTable(tr(lang, "Current Edges"), []interface{}{"#", tr(lang, "Edge Location"), tr(lang, "Connection"), tr(lang, "Source")}, rows)
 	}
 	rows := make([]prettytable.Row, 0, len(conns))
 	for i, conn := range conns {
 		rows = append(rows, prettytable.Row{i + 1, conn.IP, conn.Remote, conn.Local})
 	}
 	return renderTable(tr(lang, "Current Edges"), []interface{}{"#", "IP", tr(lang, "Remote"), tr(lang, "Local")}, rows)
+}
+
+func allMetricEdges(conns []cloudflared.EdgeConnection) bool {
+	if len(conns) == 0 {
+		return false
+	}
+	for _, conn := range conns {
+		if conn.Source != "metrics" {
+			return false
+		}
+	}
+	return true
 }
 
 func renderLatest(r history.Record) string {
@@ -889,87 +946,91 @@ func tr(lang, key string) string {
 }
 
 var zhLabels = map[string]string{
-	"Active slot":                          "当前槽位",
-	"Avg":                                  "平均",
-	"Blue slot":                            "Blue 槽位",
-	"Config":                               "配置",
-	"Connect Latency":                      "连接延迟",
-	"CURRENT":                              "当前",
-	"Current Edges":                        "当前边缘 IP",
-	"Decision":                             "切换决策",
-	"Degraded":                             "连接变差",
-	"Detail":                               "详情",
-	"disabled":                             "关闭",
-	"Effective Protocol":                   "实际协议",
-	"Edge Comparison":                      "边缘 IP 对比",
-	"Emergency RTT":                        "应急 RTT",
-	"error_rate err/s":                     "错误率 err/s",
-	"Errors":                               "错误",
-	"From":                                 "开始",
-	"Green slot":                           "Green 槽位",
-	"HA":                                   "高可用",
-	"Health":                               "健康",
-	"History":                              "历史",
-	"History Retention":                    "历史保留",
-	"HTTP Codes":                           "HTTP 状态码",
-	"HTTP 2xx/3xx/4xx/5xx":                 "HTTP 2xx/3xx/4xx/5xx",
-	"Idle":                                 "空闲",
-	"Item":                                 "项目",
-	"Latest":                               "最新",
-	"Latest Sample":                        "最近采样",
-	"Local":                                "本地",
-	"Max":                                  "最大",
-	"Median":                               "中位数",
-	"Metric":                               "指标",
-	"Metrics":                              "监控地址",
-	"Min":                                  "最小",
-	"Network":                              "网络",
-	"no cloudflared :7844 sockets found":   "没有发现 cloudflared 的 :7844 连接",
-	"no probe comparison in latest sample": "最近采样没有 IP 探测对比",
-	"no records in last":                   "最近没有记录",
-	"OK/Fail":                              "成功/失败",
-	"over":                                 "过去",
-	"Performance":                          "性能",
-	"Points":                               "点数",
-	"Protocol":                             "协议",
-	"Ready":                                "就绪",
-	"Ready / HA":                           "就绪 / 高可用",
-	"Reason":                               "原因",
-	"Remote":                               "远端",
-	"request_rate and error_rate over":     "请求率与错误率，时间窗口",
-	"request_rate req/s":                   "请求率 req/s",
-	"Requests":                             "请求",
-	"Requests / Errors":                    "请求 / 错误",
-	"Role":                                 "角色",
-	"Runtime":                              "运行时",
-	"Sample Gap":                           "采样间隔",
-	"Sample Interval":                      "采样周期",
-	"Score":                                "评分",
-	"Section":                              "分组",
-	"Sessions":                             "会话",
-	"Should Switch":                        "应切换",
-	"Slots":                                "槽位",
-	"Source":                               "来源",
-	"State":                                "状态",
-	"Status Summary":                       "状态总览",
-	"Switch Applied":                       "已执行切换",
-	"Switch Strategy":                      "切换策略",
-	"Time":                                 "时间",
-	"To":                                   "结束",
-	"TOP":                                  "候选",
-	"Top IP":                               "最佳 IP",
-	"Top RTT":                              "最佳 RTT",
-	"Traffic":                              "流量",
-	"Trend":                                "趋势",
-	"Value":                                "值",
-	"Vs Best":                              "相比最佳",
-	"Window":                               "窗口",
-	"detail":                               "详情",
-	"last interval":                        "上一周期",
-	"metrics":                              "监控",
-	"need two history samples for rates":   "需要至少两次历史采样才能计算速率",
-	"service":                              "服务",
-	"source":                               "来源",
+	"Active slot":          "当前槽位",
+	"Avg":                  "平均",
+	"Blue slot":            "Blue 槽位",
+	"Config":               "配置",
+	"Connect Latency":      "连接延迟",
+	"CURRENT":              "当前",
+	"Current Edges":        "当前边缘 IP",
+	"Decision":             "切换决策",
+	"Degraded":             "连接变差",
+	"Detail":               "详情",
+	"disabled":             "关闭",
+	"Effective Protocol":   "实际协议",
+	"Edge Location":        "边缘位置",
+	"Edge Comparison":      "边缘 IP 对比",
+	"Emergency RTT":        "应急 RTT",
+	"error_rate err/s":     "错误率 err/s",
+	"Errors":               "错误",
+	"From":                 "开始",
+	"Green slot":           "Green 槽位",
+	"HA":                   "高可用",
+	"Health":               "健康",
+	"History":              "历史",
+	"History Retention":    "历史保留",
+	"HTTP Codes":           "HTTP 状态码",
+	"HTTP 2xx/3xx/4xx/5xx": "HTTP 2xx/3xx/4xx/5xx",
+	"Idle":                 "空闲",
+	"Item":                 "项目",
+	"Latest":               "最新",
+	"Latest Sample":        "最近采样",
+	"Local":                "本地",
+	"Max":                  "最大",
+	"Median":               "中位数",
+	"Metric":               "指标",
+	"Metrics":              "监控地址",
+	"Min":                  "最小",
+	"Network":              "网络",
+	"cloudflared metrics":  "cloudflared 监控",
+	"connection ":          "连接 ",
+	"Connection":           "连接",
+	"no cloudflared edge sockets or metrics locations found": "没有发现 cloudflared 边缘连接或监控位置",
+	"no probe comparison in latest sample":                   "最近采样没有 IP 探测对比",
+	"no records in last":                                     "最近没有记录",
+	"OK/Fail":                                                "成功/失败",
+	"over":                                                   "过去",
+	"Performance":                                            "性能",
+	"Points":                                                 "点数",
+	"Protocol":                                               "协议",
+	"Ready":                                                  "就绪",
+	"Ready / HA":                                             "就绪 / 高可用",
+	"Reason":                                                 "原因",
+	"Remote":                                                 "远端",
+	"request_rate and error_rate over":                       "请求率与错误率，时间窗口",
+	"request_rate req/s":                                     "请求率 req/s",
+	"Requests":                                               "请求",
+	"Requests / Errors":                                      "请求 / 错误",
+	"Role":                                                   "角色",
+	"Runtime":                                                "运行时",
+	"Sample Gap":                                             "采样间隔",
+	"Sample Interval":                                        "采样周期",
+	"Score":                                                  "评分",
+	"Section":                                                "分组",
+	"Sessions":                                               "会话",
+	"Should Switch":                                          "应切换",
+	"Slots":                                                  "槽位",
+	"Source":                                                 "来源",
+	"State":                                                  "状态",
+	"Status Summary":                                         "状态总览",
+	"Switch Applied":                                         "已执行切换",
+	"Switch Strategy":                                        "切换策略",
+	"Time":                                                   "时间",
+	"To":                                                     "结束",
+	"TOP":                                                    "候选",
+	"Top IP":                                                 "最佳 IP",
+	"Top RTT":                                                "最佳 RTT",
+	"Traffic":                                                "流量",
+	"Trend":                                                  "趋势",
+	"Value":                                                  "值",
+	"Vs Best":                                                "相比最佳",
+	"Window":                                                 "窗口",
+	"detail":                                                 "详情",
+	"last interval":                                          "上一周期",
+	"metrics":                                                "监控",
+	"need two history samples for rates":                     "需要至少两次历史采样才能计算速率",
+	"service":                                                "服务",
+	"source":                                                 "来源",
 }
 
 func stateText(lang, state string) string {

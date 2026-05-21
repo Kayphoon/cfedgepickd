@@ -69,6 +69,33 @@ func TestEdgeRemotesDeduplicates(t *testing.T) {
 	}
 }
 
+func TestMetricsLocationEdgesSortsConnectionIDs(t *testing.T) {
+	got := metricsLocationEdges(cloudflared.Metrics{
+		ServerLocations: map[string]string{
+			"10": "lax10",
+			"2":  "sjc11",
+		},
+	})
+	if len(got) != 2 {
+		t.Fatalf("unexpected edges: %+v", got)
+	}
+	if got[0].Remote != "2" || got[0].IP != "sjc11" || got[0].Source != "metrics" {
+		t.Fatalf("unexpected first edge: %+v", got[0])
+	}
+	if got[1].Remote != "10" || got[1].IP != "lax10" || got[1].Source != "metrics" {
+		t.Fatalf("unexpected second edge: %+v", got[1])
+	}
+}
+
+func TestRenderEdgesUsesMetricLocationTable(t *testing.T) {
+	out := renderEdgesLocalized([]cloudflared.EdgeConnection{
+		{IP: "lax10", Remote: "0", Source: "metrics"},
+	}, nil, "en")
+	if !strings.Contains(out, "EDGE LOCATION") || !strings.Contains(out, "connection 0") {
+		t.Fatalf("missing metrics edge details:\n%s", out)
+	}
+}
+
 func TestRenderLineChart(t *testing.T) {
 	now := time.Unix(100, 0)
 	points := []history.Point{
