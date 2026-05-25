@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -52,6 +53,7 @@ type EdgeConnection struct {
 	Remote string `json:"remote"`
 	IP     string `json:"ip"`
 	Line   string `json:"line"`
+	Source string `json:"source,omitempty"`
 }
 
 func FetchMetrics(ctx context.Context, url string) (Metrics, error) {
@@ -219,31 +221,49 @@ func CurrentEdges(ctx context.Context, port int) ([]EdgeConnection, error) {
 
 func parseSSConnections(output string, port int) []EdgeConnection {
 	portNeedle := fmt.Sprintf(":%d", port)
-	var conns []EdgeConnection
+	var configuredPort []EdgeConnection
+	var discovered []EdgeConnection
 	for _, line := range strings.Split(output, "\n") {
-		if !strings.Contains(line, portNeedle) {
-			continue
-		}
-		if strings.Contains(line, "users:") && !strings.Contains(line, "cloudflared") {
-			continue
-		}
 		fields := strings.Fields(line)
 		if len(fields) < 5 {
 			continue
 		}
 		local, remote, ok := ssLocalRemote(fields, portNeedle)
+		if ok {
+			if strings.Contains(line, "users:") && !strings.Contains(line, "cloudflared") {
+				continue
+			}
+			configuredPort = append(configuredPort, EdgeConnection{
+				Local:  local,
+				Remote: remote,
+				IP:     hostPart(remote),
+				Line:   line,
+				Source: "socket",
+			})
+			continue
+		}
+
+		if !strings.Contains(line, "cloudflared") {
+			continue
+		}
+		local, remote, ok = ssPeer(fields)
 		if !ok {
 			continue
 		}
-		ip := hostPart(remote)
-		conns = append(conns, EdgeConnection{
-			Local:  local,
-			Remote: remote,
-			IP:     ip,
-			Line:   line,
-		})
+		if isPublicRemote(remote) {
+			discovered = append(discovered, EdgeConnection{
+				Local:  local,
+				Remote: remote,
+				IP:     hostPart(remote),
+				Line:   line,
+				Source: "socket",
+			})
+		}
 	}
-	return conns
+	if len(configuredPort) > 0 {
+		return configuredPort
+	}
+	return discovered
 }
 
 func ssLocalRemote(fields []string, portNeedle string) (string, string, bool) {
@@ -256,6 +276,25 @@ func ssLocalRemote(fields []string, portNeedle string) (string, string, bool) {
 		}
 	}
 	return "", "", false
+}
+
+func ssPeer(fields []string) (string, string, bool) {
+	if len(fields) >= 6 && (fields[0] == "tcp" || fields[0] == "udp") {
+		return fields[4], fields[5], true
+	}
+	if len(fields) >= 5 {
+		return fields[3], fields[4], true
+	}
+	return "", "", false
+}
+
+func isPublicRemote(remote string) bool {
+	ip := hostPart(remote)
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false
+	}
+	return addr.IsGlobalUnicast() && !addr.IsPrivate() && !addr.IsLoopback() && !addr.IsLinkLocalUnicast()
 }
 
 func currentEdgesLsof(ctx context.Context, port int) ([]EdgeConnection, error) {
@@ -285,6 +324,7 @@ func currentEdgesLsof(ctx context.Context, port int) ([]EdgeConnection, error) {
 			Remote: remote,
 			IP:     hostPart(remote),
 			Line:   line,
+			Source: "socket",
 		})
 	}
 	return conns, nil

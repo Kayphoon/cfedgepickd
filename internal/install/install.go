@@ -14,6 +14,7 @@ import (
 	"github.com/kayphoon/tunnelflux/internal/config"
 	"github.com/kayphoon/tunnelflux/internal/discover"
 	"github.com/kayphoon/tunnelflux/internal/probe"
+	"github.com/kayphoon/tunnelflux/internal/switcher"
 )
 
 const (
@@ -33,13 +34,16 @@ type Options struct {
 }
 
 type Report struct {
-	Discover discover.Report `json:"discover"`
-	Probe    probe.Report    `json:"probe"`
-	Config   config.Config   `json:"config"`
-	Unit     string          `json:"unit"`
-	Applied  bool            `json:"applied"`
-	Notes    []string        `json:"notes"`
+	Discover discover.Report  `json:"discover"`
+	Probe    probe.Report     `json:"probe"`
+	Config   config.Config    `json:"config"`
+	Unit     string           `json:"unit"`
+	Switch   *switcher.Result `json:"switch,omitempty"`
+	Applied  bool             `json:"applied"`
+	Notes    []string         `json:"notes"`
 }
+
+type initialPinApplyFunc func(context.Context, config.Config, []string, string) (switcher.Result, error)
 
 func Run(ctx context.Context, opts Options) (Report, error) {
 	dr, err := discover.Run(ctx)
@@ -56,14 +60,17 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if err := cfg.Validate(); err != nil {
 		return Report{Discover: dr, Config: cfg}, err
 	}
-	pr, err := probe.Run(ctx, probeConfigForInstall(cfg), probe.Mode(cfg.Cloudflared.Protocol))
+	pr, probeErr := probe.Run(ctx, probeConfigForInstall(cfg), probe.Mode(cfg.Cloudflared.Protocol))
 	cfg.Runtime.DryRun = true
 	unit := RenderService(opts.Binary, opts.Config, cfg.Cloudflared.Service)
 	rep := Report{Discover: dr, Probe: pr, Config: cfg, Unit: unit}
 	rep.Notes = append(rep.Notes, "installer probe uses a fast sample; daemon keeps full configured probe settings")
 	if !opts.Apply {
 		rep.Notes = append(rep.Notes, "dry-run only; no files written")
-		return rep, err
+		return rep, probeErr
+	}
+	if probeErr != nil {
+		return rep, probeErr
 	}
 
 	configPath := opts.Config
@@ -92,7 +99,43 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	rep.Config = cfg
 	rep.Unit = RenderService(opts.Binary, configPath, cfg.Cloudflared.Service)
 	rep.Notes = append(rep.Notes, "wrote "+configPath, "wrote "+unitPath)
-	return rep, err
+	sw, err := applyInitialPin(ctx, cfg, pr, switcher.Apply)
+	rep.Switch = &sw
+	if err != nil {
+		return rep, err
+	}
+	rep.Notes = append(rep.Notes, "applied initial edge pin")
+	return rep, nil
+}
+
+func applyInitialPin(ctx context.Context, cfg config.Config, pr probe.Report, apply initialPinApplyFunc) (switcher.Result, error) {
+	if apply == nil {
+		apply = switcher.Apply
+	}
+	cfg = cfg.WithDefaults()
+	cfg.Runtime.DryRun = false
+	ips := initialPinIPs(pr.Top)
+	if len(ips) == 0 {
+		return switcher.Result{}, fmt.Errorf("initial installer probe produced no healthy edge IPs")
+	}
+	protocol := pr.EffectiveProtocol
+	if protocol == "" {
+		protocol = cfg.Cloudflared.Protocol
+	}
+	return apply(ctx, cfg, ips, protocol)
+}
+
+func initialPinIPs(rows []probe.Result) []string {
+	seen := map[string]bool{}
+	var ips []string
+	for _, r := range rows {
+		if r.IP == "" || r.OK <= 0 || seen[r.IP] {
+			continue
+		}
+		seen[r.IP] = true
+		ips = append(ips, r.IP)
+	}
+	return ips
 }
 
 func probeConfigForInstall(cfg config.Config) config.Config {

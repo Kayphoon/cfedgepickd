@@ -80,3 +80,15 @@ udp   ESTAB 0      0      10.0.0.10:39105 198.41.200.115:7844 users:(("other",pi
 		t.Fatalf("unexpected TCP edge: %+v", conns[1])
 	}
 }
+
+func TestIsPublicRemoteRejectsOriginLoopback(t *testing.T) {
+	if isPublicRemote("127.0.0.1:8000") {
+		t.Fatal("loopback origin socket should not be treated as an edge")
+	}
+}
+
+func TestIsPublicRemoteAcceptsPublicEdge(t *testing.T) {
+	if !isPublicRemote("198.41.200.227:7844") {
+		t.Fatal("public cloudflared peer should be treated as an edge candidate")
+	}
+}
