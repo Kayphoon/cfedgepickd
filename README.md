@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh
 Pin a specific release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --version v0.2.13
+curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --version v0.3.2
 ```
 
 The installer detects Linux/macOS and `amd64`/`arm64`, downloads the matching
@@ -126,7 +126,7 @@ Supported metrics include `request_rate`, `request_delta`, `error_rate`,
 
 ```bash
 make test
-make dist VERSION=v0.2.13
+make dist VERSION=v0.3.2
 ```
 
 `make dist` builds static binaries for Linux and macOS:
@@ -149,8 +149,8 @@ creates a GitHub Release and uploads the platform archives, `checksums.txt`,
 and `install.sh`:
 
 ```bash
-git tag v0.2.13
-git push origin v0.2.13
+git tag v0.3.2
+git push origin v0.3.2
 ```
 
 Tag builds embed the tag name in `tf version`. Non-tag CI builds embed the

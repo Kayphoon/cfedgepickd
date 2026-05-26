@@ -21,7 +21,7 @@ Default behavior:
   Install the latest release, write the config, enable the service, and start it.
 
 Options:
-  --version VERSION   Release tag to install, for example v0.2.13. Default: latest
+  --version VERSION   Release tag to install, for example v0.3.2. Default: latest
   --emergency-rtt-ms MS
                      Immediate hot-switch threshold in ms. 0 disables. Default: 0
   --no-start          Install the service but do not start it
@@ -39,7 +39,7 @@ Advanced options:
 Examples:
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh
   curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --emergency-rtt-ms 100
-  curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --version v0.2.13
+  curl -fsSL https://raw.githubusercontent.com/Kayphoon/TunnelFlux/main/install.sh | sudo sh -s -- --version v0.3.2
 USAGE
 }
 
